@@ -487,11 +487,18 @@ export default class MermaidLinkNavPlugin extends Plugin {
       // 单行压缩格式规范化后再渲染，避免 mermaid 11 解析/渲染崩溃（孤立节点定义夹在语句间）
       const renderCode = normalizeDiagram(parsed.code);
       const result = await mermaid.render(renderId, renderCode);
+      console.log('[mln-diag] ' + ctx.sourcePath + ' render OK svgLen=' + result.svg.length);
       const svgDoc = new DOMParser().parseFromString(result.svg, 'image/svg+xml');
-      wrapper.appendChild(svgDoc.documentElement);
+      const svgRoot = svgDoc.documentElement;
+      if (svgRoot.nodeName !== 'svg') {
+        console.log('[mln-diag] DOMParser 结果非 svg: nodeName=' + svgRoot.nodeName + ', 前200字=' + result.svg.slice(0, 200));
+      }
+      console.log('[mln-diag] svgRoot viewBox=' + svgRoot.getAttribute('viewBox') + ' w=' + svgRoot.getAttribute('width') + ' h=' + svgRoot.getAttribute('height'));
+      wrapper.appendChild(svgRoot);
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
       wrapper.dataset.renderId = renderId;
+      console.log('[mln-diag] svg appended, wrapper children=' + wrapper.children.length + ', 第一个子元素=' + wrapper.firstElementChild?.nodeName);
       this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source);
     } catch (err) {
       wrapper.empty();
@@ -520,6 +527,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     allSvg.forEach((s, i) => { if (i > 0) s.remove(); });
     const svg = allSvg[0] ?? null;
     const nodeEls = Array.from(wrapper.querySelectorAll<SVGGElement>('g.node'));
+    console.log('[mln-diag] enhance: svg=' + !!svg + ' nodes=' + nodeEls.length + ' viewBox=' + svg?.getAttribute('viewBox'));
 
     // 立即恢复滚动位置（在浏览器绘制下一帧前设置，避免先显示顶部再跳过去的闪烁）
     this.restoreScrollPosition(sourcePath, wrapper);
@@ -1165,6 +1173,18 @@ export default class MermaidLinkNavPlugin extends Plugin {
     }
     // 挂载滚动监听
     this.attachScrollSave(sourcePath, wrapper);
+    // [mln-diag] 渲染完成 500ms 后检查 svg 实际可见性
+    window.setTimeout(() => {
+      const s = wrapper.querySelector('svg');
+      if (!s) { console.log('[mln-diag] 渲染完成但 wrapper 内无 svg'); return; }
+      const r = s.getBoundingClientRect();
+      console.log('[mln-diag] svg clientW=' + s.clientWidth + ' clientH=' + s.clientHeight
+        + ' rectX=' + Math.round(r.x) + ' rectY=' + Math.round(r.y)
+        + ' rectW=' + Math.round(r.width) + ' rectH=' + Math.round(r.height)
+        + ' 可见=' + (r.width > 0 && r.height > 0)
+        + ' viewBox=' + s.getAttribute('viewBox')
+        + ' styleH=' + s.style.height);
+    }, 500);
   }
 
   /** 定时轮询状态文件：手机端 Obsidian 不触发外部文件变化事件，需兜底检测 */
