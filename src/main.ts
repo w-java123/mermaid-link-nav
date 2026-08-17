@@ -487,18 +487,18 @@ export default class MermaidLinkNavPlugin extends Plugin {
       // 单行压缩格式规范化后再渲染，避免 mermaid 11 解析/渲染崩溃（孤立节点定义夹在语句间）
       const renderCode = normalizeDiagram(parsed.code);
       const result = await mermaid.render(renderId, renderCode);
-      console.log('[mln-diag] ' + ctx.sourcePath + ' render OK svgLen=' + result.svg.length);
-      const svgDoc = new DOMParser().parseFromString(result.svg, 'image/svg+xml');
-      const svgRoot = svgDoc.documentElement;
-      if (svgRoot.nodeName !== 'svg') {
-        console.log('[mln-diag] DOMParser 结果非 svg: nodeName=' + svgRoot.nodeName + ', 前200字=' + result.svg.slice(0, 200));
-      }
-      console.log('[mln-diag] svgRoot viewBox=' + svgRoot.getAttribute('viewBox') + ' w=' + svgRoot.getAttribute('width') + ' h=' + svgRoot.getAttribute('height'));
-      wrapper.appendChild(svgRoot);
+      // 用 HTML 解析器（insertAdjacentHTML）插入 svg，而不是 DOMParser('image/svg+xml')：
+      // mermaid 输出的 foreignObject 内是未闭合的 <br>（HTML 风格），XML 解析器会报
+      // 'Opening and ending tag mismatch: br' 并截断 svg（只剩前几个节点，图显示空白/缺失）。
+      // Obsidian 原生 mermaid 渲染也是用 insertAdjacentHTML，HTML 解析器能完整解析 foreignObject。
+      wrapper.insertAdjacentHTML('beforeend', result.svg);
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
       wrapper.dataset.renderId = renderId;
-      console.log('[mln-diag] svg appended, wrapper children=' + wrapper.children.length + ', 第一个子元素=' + wrapper.firstElementChild?.nodeName);
+      const insertedSvg = wrapper.querySelector('svg');
+      console.log('[mln-diag] svg inserted, nodes=' + wrapper.querySelectorAll('g.node').length
+        + ' viewBox=' + insertedSvg?.getAttribute('viewBox')
+        + ' firstChild=' + wrapper.firstElementChild?.nodeName);
       this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source);
     } catch (err) {
       wrapper.empty();
@@ -908,15 +908,27 @@ export default class MermaidLinkNavPlugin extends Plugin {
         return null;
       }
     };
-    const getFullSvgClone = (): SVGSVGElement | null => {
+    const getFullSvgClone = (): { clone: SVGSVGElement; width: number; height: number } | null => {
       if (!svg) return null;
       const base = panZoom?.getBaseSize();
-      if (!base || !base.width || !base.height) return null;
+      // 导出完整图：先用 getBBox() 实时计算全部内容边界（与 viewBox 无关，即使
+      // viewBox 被缩放/平移缓存覆盖也能拿到完整范围），再与初始完整尺寸取并集。
+      let x = 0, y = 0, w = base?.width ?? 0, h = base?.height ?? 0;
+      try {
+        const bb = svg.getBBox();
+        if (bb.width > 0 && bb.height > 0) {
+          x = Math.min(0, bb.x);
+          y = Math.min(0, bb.y);
+          w = Math.max(base?.width ?? 0, bb.x + bb.width) - x;
+          h = Math.max(base?.height ?? 0, bb.y + bb.height) - y;
+        }
+      } catch { /* getBBox 不可用时回退到初始尺寸 */ }
+      if (!w || !h) return null;
       const clone = svg.cloneNode(true) as SVGSVGElement;
       clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      clone.setAttribute('viewBox', `0 0 ${base.width} ${base.height}`);
-      clone.setAttribute('width', String(base.width));
-      clone.setAttribute('height', String(base.height));
+      clone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+      clone.setAttribute('width', String(w));
+      clone.setAttribute('height', String(h));
       // 导出文件显示时居中（以 svg 内 <style> 规则实现，避免直接给元素设置 style）
       const centerStyle = document.createElementNS('http://www.w3.org/2000/svg', 'style');
       centerStyle.textContent = 'svg{display:block;margin:0 auto;max-width:100%;height:auto;}';
@@ -931,12 +943,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
       });
       // 导出不保留"当前节点"高亮：移除高亮类（样式在 Obsidian CSS 中，不在导出文件里），所有节点格式一致
       clone.querySelectorAll('.mln-current-node').forEach((el) => el.classList.remove('mln-current-node'));
-      return clone;
+      return { clone, width: w, height: h };
     };
     const exportSvg = async () => {
       try {
-        const clone = getFullSvgClone();
-        if (!clone) { new Notice('导出失败：找不到 SVG'); return; }
+        const full = getFullSvgClone();
+        if (!full) { new Notice('导出失败：找不到 SVG'); return; }
+        const { clone } = full;
         const xml = new XMLSerializer().serializeToString(clone);
         const data = new TextEncoder().encode(xml).buffer as ArrayBuffer;
         const p = await writeToVault(`${fileNameBase}.svg`, data, 'svg');
@@ -946,9 +959,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
       }
     };
     const exportPng = async () => {
-      const clone = getFullSvgClone();
-      const base = panZoom?.getBaseSize();
-      if (!clone || !base) { new Notice('导出失败：找不到 SVG'); return; }
+      const full = getFullSvgClone();
+      if (!full) { new Notice('导出失败：找不到 SVG'); return; }
+      const { clone, width, height } = full;
       new Notice('正在导出 PNG…');
       const xml = new XMLSerializer().serializeToString(clone);
       // 用 data URL 加载（避免 blob URL 在部分环境触发跨域限制）
@@ -961,11 +974,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
           img.src = dataUrl;
         });
         // 2 倍高清；超大图自动降级避免 canvas 尺寸上限（16384 边）
-        const maxEdge = Math.max(base.width, base.height);
+        const maxEdge = Math.max(width, height);
         const scale = Math.min(2, 16384 / maxEdge);
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(base.width * scale));
-        canvas.height = Math.max(1, Math.round(base.height * scale));
+        canvas.width = Math.max(1, Math.round(width * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('无法创建画布');
         // 纯白背景（默认 SVG 背景透明，导出 PNG 时填白）
