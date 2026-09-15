@@ -10,6 +10,7 @@ import {
 } from 'obsidian';
 import mermaid from 'mermaid';
 import { DiagramFocusController } from './focus-dom';
+import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
@@ -191,6 +192,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
       }
     });
 
+    // 画布式平移缩放（滚轮缩放 / 拖动平移 / 触摸板手势）
+    if (svg) new PanZoomController(svg);
+
     // 双击聚焦控制器
     let controller: DiagramFocusController | null = null;
     let resetBtn: HTMLDivElement | null = null;
@@ -213,6 +217,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
       // 双击空白区域复位；Esc 复位
       svg.addEventListener('dblclick', (ev) => {
+        if (svg.dataset.mlnPan === '1') return; // 拖动结束后的误触发
         if (!(ev.target as Element | null)?.closest('g.node')) controller?.restore();
       });
       wrapper.tabIndex = -1;
@@ -261,6 +266,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
         // 仅 Ctrl/⌘（或 Alt）+ 单击才跳转查看详情，普通左键单击不跳转
         g.addEventListener('click', (ev) => {
+          if (svg?.dataset.mlnPan === '1') return; // 拖动结束后的误触发
           ev.preventDefault();
           ev.stopPropagation();
           if (ev.ctrlKey || ev.metaKey || ev.altKey) open(ev);
@@ -287,6 +293,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
       /* ---- 双击聚焦 ---- */
       if (controller && nodeId) {
         g.addEventListener('dblclick', (ev) => {
+          if (svg?.dataset.mlnPan === '1') return; // 拖动结束后的误触发
           ev.preventDefault();
           ev.stopPropagation();
           controller!.toggle(nodeId);

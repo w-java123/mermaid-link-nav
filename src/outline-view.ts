@@ -6,6 +6,7 @@ import { ItemView, Menu, PaneType, TFile, WorkspaceLeaf, type App } from 'obsidi
 import mermaid from 'mermaid';
 import type MermaidLinkNavPlugin from './main';
 import { DiagramFocusController } from './focus-dom';
+import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { buildOutlineTree, outlineToMermaid, type OutlineNode } from './outline';
 
@@ -19,6 +20,7 @@ export class OutlineFlowView extends ItemView {
   private direction: 'TB' | 'LR' = 'TB';
   private renderToken = 0;
   private controller: DiagramFocusController | null = null;
+  private panZoom: PanZoomController | null = null;
 
   private toolbar!: HTMLDivElement;
   private stage!: HTMLDivElement;
@@ -67,7 +69,7 @@ export class OutlineFlowView extends ItemView {
     });
     this.toolbar.createSpan({
       cls: 'mln-outline-hint',
-      text: 'Ctrl/⌘+单击查看详情 · 双击聚焦放大（再双击返回全图） · 右键更多',
+      text: 'Ctrl/⌘+单击查看详情 · 双击聚焦放大 · 滚轮缩放 · 拖动平移 · 右键更多',
     });
 
     this.stage = this.contentEl.createDiv({ cls: 'mln-outline-stage' });
@@ -125,6 +127,8 @@ export class OutlineFlowView extends ItemView {
     const token = ++this.renderToken;
     this.controller?.dispose();
     this.controller = null;
+    this.panZoom?.dispose();
+    this.panZoom = null;
     this.resetBtn.style.display = 'none';
     this.stage.empty();
 
@@ -215,6 +219,9 @@ export class OutlineFlowView extends ItemView {
       }
     });
 
+    // 画布式平移缩放
+    if (svg) this.panZoom = new PanZoomController(svg);
+
     if (svg && this.plugin.settings.dblclickFocus) {
       this.controller = new DiagramFocusController(svg, edges, {
         renderId,
@@ -227,6 +234,7 @@ export class OutlineFlowView extends ItemView {
         },
       });
       svg.addEventListener('dblclick', (ev) => {
+        if (svg.dataset.mlnPan === '1') return;
         if (!(ev.target as Element | null)?.closest('g.node')) this.controller?.restore();
       });
     }
@@ -258,6 +266,7 @@ export class OutlineFlowView extends ItemView {
       };
 
       g.addEventListener('click', (ev) => {
+        if (svg?.dataset.mlnPan === '1') return; // 拖动结束后的误触发
         ev.preventDefault();
         ev.stopPropagation();
         const mode = detailPane(ev);
@@ -283,6 +292,7 @@ export class OutlineFlowView extends ItemView {
       });
       if (this.controller) {
         g.addEventListener('dblclick', (ev) => {
+          if (svg?.dataset.mlnPan === '1') return; // 拖动结束后的误触发
           ev.preventDefault();
           ev.stopPropagation();
           this.controller?.toggle(id);

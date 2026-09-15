@@ -55,6 +55,11 @@
 .mermaid-link-wrapper svg {
   max-width: 100%;
   height: auto;
+  cursor: grab;
+  touch-action: none;
+}
+.mermaid-link-wrapper svg.mln-panning {
+  cursor: grabbing;
 }
 
 /* 可点击节点 */
