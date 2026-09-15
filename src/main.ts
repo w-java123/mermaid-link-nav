@@ -318,26 +318,47 @@ export default class MermaidLinkNavPlugin extends Plugin {
             }),
           );
 
-          // 设置为判断节点（菱形 + 是/否两条出边）
+          // 设置为判断节点（点击图上节点选择是/否目标）
           menu.addItem((item) =>
             item.setTitle('设置为判断节点').onClick(() => {
-              const parsed = parseDiagram(diagramSource);
-              const nodeOptions = parsed.nodes
-                .filter((n) => n.id !== nodeId)
-                .map((n) => ({ id: n.id, label: extractNodeLabel(diagramSource, n) }));
-              if (nodeOptions.length === 0) {
-                new Notice('图中没有其他节点可选，请先添加节点');
-                return;
-              }
-              // 先选「是」的目标
-              new NodeSelectModal(this.app, nodeOptions, (yesId) => {
-                // 再选「否」的目标
-                new NodeSelectModal(this.app, nodeOptions, async (noId) => {
-                  const newSource = setAsDecision(diagramSource, nodeId, yesId, noId);
-                  const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-                  if (!ok) new Notice('设置判断节点失败');
-                }, '选择「否」的目标节点').open();
-              }, '选择「是」的目标节点').open();
+              if (!svg) return;
+              let phase: 'yes' | 'no' = 'yes';
+              let yesTarget: string | null = null;
+              const notice = new Notice('请点击选择为【是】时的子节点（Esc 取消）', 0);
+
+              const cleanup = () => {
+                svg.removeEventListener('click', onClick, true);
+                document.removeEventListener('keydown', onKey);
+                notice.hide();
+              };
+
+              const onKey = (ev: KeyboardEvent) => {
+                if (ev.key === 'Escape') cleanup();
+              };
+
+              const onClick = (ev: MouseEvent) => {
+                const g = (ev.target as Element)?.closest('g.node') as SVGGElement | null;
+                if (!g) return;
+                const targetId = extractNodeId(g, renderId);
+                if (!targetId || targetId === nodeId || !knownIds.has(targetId)) return;
+                ev.stopPropagation();
+
+                if (phase === 'yes') {
+                  yesTarget = targetId;
+                  phase = 'no';
+                  notice.setMessage('请点击选择为【否】时的子节点（Esc 取消）');
+                } else {
+                  const noTarget = targetId;
+                  cleanup();
+                  const newSource = setAsDecision(diagramSource, nodeId, yesTarget!, noTarget);
+                  updateNoteSource(this.app, sourcePath, diagramSource, newSource).then((ok) => {
+                    if (!ok) new Notice('设置判断节点失败');
+                  });
+                }
+              };
+
+              svg.addEventListener('click', onClick, true);
+              document.addEventListener('keydown', onKey);
             }),
           );
 
