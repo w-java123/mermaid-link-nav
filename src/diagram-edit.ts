@@ -104,13 +104,17 @@ export function addEdge(source: string, from: string, to: string): string {
   return source.replace(/\s+$/, '') + edge + '\n';
 }
 
+/** 行首是否有节点定义（A[、A(、A{ 等） */
+const ANY_NODE_DEF_RE = /^\s*[A-Za-z_][\w-]*\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])/;
+/** 箭头后是否紧跟目标节点定义（--> G["..."]） */
+const TARGET_DEF_RE = /-->\s*[A-Za-z_][\w-]*\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])/;
+
 /** 删除节点的所有入边（X --> nodeId），保留节点定义，链式边自动跳过中间节点 */
 export function removeIncomingEdges(source: string, nodeId: string): string {
   const lines = source.split('\n');
   const result: string[] = [];
   const inEdgeRe = new RegExp(`-->\\s*${nodeId}(\\s|$|[^\\w-])`);
   const outEdgeRe = new RegExp(`${nodeId}\\s*-->`);
-  // 行内是否包含 nodeId 自己的节点定义（D[、D(、D{ 等）
   const selfDefRe = new RegExp(`${nodeId}\\s*(\\[\\[|\\[\\(|\\(\\(|\\{\\{|\\[\\/|\\[\\\\|[\\[\\(\\{>])`);
 
   for (const line of lines) {
@@ -127,6 +131,10 @@ export function removeIncomingEdges(source: string, nodeId: string): string {
         // 链式边 A --> D --> C，改成 A --> C
         const modified = line.replace(new RegExp(`-->\\s*${nodeId}\\s*-->`, 'g'), '-->');
         result.push(modified);
+      } else if (ANY_NODE_DEF_RE.test(line)) {
+        // C["名称"] --> D：删掉 --> D 及之后，保留 C 的节点定义
+        const modified = line.replace(new RegExp(`-->\\s*${nodeId}.*$`), '').trimEnd();
+        if (modified.trim()) result.push(modified);
       }
       // 纯入边行 A --> D，整行删除
     } else {
@@ -140,7 +148,6 @@ export function removeIncomingEdges(source: string, nodeId: string): string {
 export function removeOutgoingEdges(source: string, nodeId: string): string {
   const lines = source.split('\n');
   const result: string[] = [];
-  // 行内是否包含 nodeId 自己的节点定义（F[、F(、F{ 等）
   const selfDefRe = new RegExp(`${nodeId}\\s*(\\[\\[|\\[\\(|\\(\\(|\\{\\{|\\[\\/|\\[\\\\|[\\[\\(\\{>])`);
   const pureOutRe = new RegExp(`^\\s*${nodeId}\\s*-->`);
   const chainRe = new RegExp(`-->\\s*${nodeId}\\s*-->`);
@@ -153,6 +160,10 @@ export function removeOutgoingEdges(source: string, nodeId: string): string {
     if (selfDefRe.test(line) && /-->/.test(line)) {
       // F["名称"] --> G：删除出边段，保留节点定义
       const modified = line.replace(/-->\s*[A-Za-z_][\w-]*/g, '').replace(/\s*-->\s*$/, '').trimEnd();
+      if (modified.trim()) result.push(modified);
+    } else if (pureOutRe.test(line) && TARGET_DEF_RE.test(line)) {
+      // F --> G["名称"]：删掉 F -->，保留 G 的节点定义
+      const modified = line.replace(new RegExp(`^\\s*${nodeId}\\s*-->\\s*`), '');
       if (modified.trim()) result.push(modified);
     } else if (pureOutRe.test(line)) {
       // 纯出边行 F --> G，删除
@@ -174,7 +185,7 @@ export function addLabeledEdge(source: string, from: string, to: string, label: 
   return source.replace(/\s+$/, '') + edge + '\n';
 }
 
-/** 设置为判断节点：改菱形 + 删除原有出边 + 添加 是/否 两条带标签出边 */
+/** 设置为判断节点：改菱形 + 删除原有出边 + 添加 是/否 两条带标签出边 + 隐形链接控制左右 */
 export function setAsDecision(
   source: string,
   nodeId: string,
@@ -185,6 +196,10 @@ export function setAsDecision(
   result = removeOutgoingEdges(result, nodeId);
   result = addLabeledEdge(result, nodeId, yesTarget, '是');
   result = addLabeledEdge(result, nodeId, noTarget, '否');
+  // 隐形链接：强制是/否目标同一层级，是在左、否在右
+  if (yesTarget !== noTarget) {
+    result = result.replace(/\s+$/, '') + `\n${yesTarget} ~~~ ${noTarget}\n`;
+  }
   return result;
 }
 
