@@ -325,6 +325,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
               const nodeOptions = parsed.nodes
                 .filter((n) => n.id !== nodeId)
                 .map((n) => ({ id: n.id, label: extractNodeLabel(diagramSource, n) }));
+              if (nodeOptions.length === 0) {
+                new Notice('图中没有其他节点可选，请先添加节点');
+                return;
+              }
               // 先选「是」的目标
               new NodeSelectModal(this.app, nodeOptions, (yesId) => {
                 // 再选「否」的目标

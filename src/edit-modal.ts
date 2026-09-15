@@ -122,7 +122,7 @@ export class NodeSelectModal extends FuzzySuggestModal<NodeOption> {
     this.items = items;
     this.onChoose = onChoose;
     this.setPlaceholder('输入节点名称搜索…');
-    if (title) this.setTitle(title);
+    if (title && this.titleEl) this.titleEl.setText(title);
   }
 
   getItems(): NodeOption[] {
