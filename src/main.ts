@@ -16,7 +16,7 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
-import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, updateNoteSource } from './diagram-edit';
+import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, setParent, updateNoteSource } from './diagram-edit';
 import { NodeEditModal, NodeSelectModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
@@ -267,7 +267,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
         if (nodeId && knownIds.has(nodeId)) {
           const link = links.get(nodeId);
 
-          // 添加父节点（选择已存在节点，建立 选中 --> 当前 的连线）
+          // 添加父节点（替换原有父节点：删除入边，建立 选中 --> 当前）
           menu.addItem((item) =>
             item.setTitle('添加父节点').onClick(() => {
               const parsed = parseDiagram(diagramSource);
@@ -275,7 +275,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
                 .filter((n) => n.id !== nodeId)
                 .map((n) => ({ id: n.id, label: extractNodeLabel(diagramSource, n) }));
               new NodeSelectModal(this.app, nodeOptions, async (selectedId) => {
-                const newSource = addEdge(diagramSource, selectedId, nodeId);
+                const newSource = setParent(diagramSource, nodeId, selectedId);
                 const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
                 if (!ok) new Notice('添加父节点失败');
               }).open();

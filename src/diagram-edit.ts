@@ -104,6 +104,40 @@ export function addEdge(source: string, from: string, to: string): string {
   return source.replace(/\s+$/, '') + edge + '\n';
 }
 
+/** 删除节点的所有入边（X --> nodeId），链式边自动跳过中间节点 */
+export function removeIncomingEdges(source: string, nodeId: string): string {
+  const lines = source.split('\n');
+  const result: string[] = [];
+  const inEdgeRe = new RegExp(`-->\\s*${nodeId}(\\s|$|[^\\w-])`);
+  const outEdgeRe = new RegExp(`${nodeId}\\s*-->`);
+
+  for (const line of lines) {
+    if (/^\s*(%%|graph|flowchart|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
+      result.push(line);
+      continue;
+    }
+    if (inEdgeRe.test(line)) {
+      if (outEdgeRe.test(line)) {
+        // 链式边 A --> nodeId --> C，改成 A --> C
+        const modified = line.replace(new RegExp(`-->\\s*${nodeId}\\s*-->`, 'g'), '-->');
+        result.push(modified);
+      }
+      // 简单入边 A --> nodeId，整行删除
+    } else {
+      result.push(line);
+    }
+  }
+  return result.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/** 替换节点的父节点：删除原有入边，建立 parentId --> nodeId */
+export function setParent(source: string, nodeId: string, parentId: string): string {
+  if (nodeId === parentId) return source;
+  let result = removeIncomingEdges(source, nodeId);
+  result = addEdge(result, parentId, nodeId);
+  return result;
+}
+
 /** 删除指定节点及其所有相关连线 */
 export function deleteNode(source: string, nodeId: string): string {
   const parsed = parseDiagram(source);
