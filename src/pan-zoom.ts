@@ -121,8 +121,8 @@ export class PanZoomController {
       ev.preventDefault();
       this.sync();
       if (ev.ctrlKey) {
-        // 触摸板双指捏合 / Ctrl+滚轮 → 缩放
-        this.zoomAt(ev.clientX, ev.clientY, Math.exp(-ev.deltaY * 0.01));
+        // 触摸板双指捏合 / Ctrl+滚轮 → 缩放（deltaY<0 上滚/张开=放大）
+        this.zoomAt(ev.clientX, ev.clientY, Math.exp(ev.deltaY * 0.01));
       } else if (Math.abs(ev.deltaX) > 0) {
         // 触摸板水平滑动 → 平移
         this.panBy(ev.deltaX, ev.deltaY);
@@ -130,8 +130,8 @@ export class PanZoomController {
         // 触摸板垂直滑动（像素模式小增量）→ 平移
         this.panBy(0, ev.deltaY);
       } else {
-        // 鼠标滚轮 → 以指针位置为中心缩放
-        this.zoomAt(ev.clientX, ev.clientY, Math.exp(-ev.deltaY * 0.0015));
+        // 鼠标滚轮 → 以指针位置为中心缩放（上滚放大、下滚缩小）
+        this.zoomAt(ev.clientX, ev.clientY, Math.exp(ev.deltaY * 0.0015));
       }
     };
 

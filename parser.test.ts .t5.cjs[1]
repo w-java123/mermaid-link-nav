@@ -1,0 +1,314 @@
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// src/parser.test.ts
+var import_node_assert = __toESM(require("node:assert"));
+
+// src/parser.ts
+var WIKILINK_RE = /\[\[([^\]|#]*)(#[^\]|]*)?(?:\|([^\]]*))?\]\]/g;
+var SHAPES = [
+  { opener: "[[", closers: ["]]"] },
+  { opener: "[(", closers: [")]"] },
+  { opener: "((", closers: ["))"] },
+  { opener: "{{", closers: ["}}"] },
+  { opener: "[/", closers: ["/]", "\\]"] },
+  { opener: "[\\", closers: ["\\]", "/]"] },
+  { opener: "[", closers: ["]"] },
+  { opener: "(", closers: [")"] },
+  { opener: "{", closers: ["}"] },
+  { opener: ">", closers: ["]"] }
+];
+var NODE_RE = /(?:^|[^\w])([A-Za-z_][\w-]*)\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])/g;
+var COMMENT_RE = /%%[^\n]*/g;
+function basename(path) {
+  const parts = path.split("/");
+  return parts[parts.length - 1] ?? path;
+}
+function collectWikilinks(code) {
+  const hits = [];
+  WIKILINK_RE.lastIndex = 0;
+  let m;
+  while ((m = WIKILINK_RE.exec(code)) !== null) {
+    const path = (m[1] ?? "").trim();
+    const hash = (m[2] ?? "").trim();
+    const alias = m[3];
+    const target = path + hash;
+    const display = alias !== void 0 ? alias : basename(path) + hash;
+    hits.push({ start: m.index, end: m.index + m[0].length, target, display });
+  }
+  return hits;
+}
+function rangeContains(ranges, pos) {
+  return ranges.some(([a, b]) => pos >= a && pos < b);
+}
+function hitAt(hits, pos) {
+  return hits.find((h) => pos >= h.start && pos < h.end);
+}
+function findClosers(code, from, closers, hits) {
+  for (let i = from; i < code.length; ) {
+    const hit = hitAt(hits, i);
+    if (hit) {
+      const overlap = hit.end - 1;
+      if (closers.some((c) => code.startsWith(c, overlap))) return overlap;
+      i = hit.end;
+      continue;
+    }
+    if (closers.some((c) => code.startsWith(c, i))) return i;
+    i++;
+  }
+  return -1;
+}
+function replaceWikilinks(text, hits, base) {
+  let out = "";
+  let last = 0;
+  for (const h of hits) {
+    const s = h.start - base;
+    const e = h.end - base;
+    if (s < last || e > text.length) continue;
+    out += text.slice(last, s) + h.display;
+    last = e;
+  }
+  out += text.slice(last);
+  return out;
+}
+function normalizeLabel(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+function parseDiagram(code) {
+  const comments = [];
+  COMMENT_RE.lastIndex = 0;
+  let cm;
+  while ((cm = COMMENT_RE.exec(code)) !== null) {
+    comments.push([cm.index, cm.index + cm[0].length]);
+  }
+  const hits = collectWikilinks(code);
+  const links = /* @__PURE__ */ new Map();
+  const claimed = [];
+  NODE_RE.lastIndex = 0;
+  let m;
+  while ((m = NODE_RE.exec(code)) !== null) {
+    const matchStart = m.index + m[0].indexOf(m[1]);
+    if (rangeContains(comments, m.index) || rangeContains(claimed, matchStart)) continue;
+    const id = m[1];
+    const token = m[2];
+    const shape = SHAPES.find((s) => s.opener === token);
+    if (!shape) continue;
+    const openerEnd = m.index + m[0].length;
+    let p = openerEnd;
+    while (p < code.length && /\s/.test(code[p])) p++;
+    let labelStart = p;
+    let labelEnd = -1;
+    let shapeEnd = -1;
+    if (code[p] === '"') {
+      labelStart = p + 1;
+      let q = labelStart;
+      while (q < code.length && code[q] !== '"') {
+        const hit = hitAt(hits, q);
+        if (hit) q = hit.end;
+        else q++;
+      }
+      labelEnd = q;
+      let c = q + 1;
+      while (c < code.length && /\s/.test(code[c])) c++;
+      const closer = shape.closers.find((cl) => code.startsWith(cl, c));
+      if (!closer) continue;
+      shapeEnd = c + closer.length;
+    } else {
+      const closeStart = findClosers(code, labelStart, shape.closers, hits);
+      if (closeStart < 0) continue;
+      labelEnd = closeStart;
+      const closer = shape.closers.find((cl) => code.startsWith(cl, closeStart));
+      shapeEnd = closeStart + closer.length;
+    }
+    claimed.push([matchStart, shapeEnd]);
+    const inside = hits.filter((h) => h.start >= labelStart && h.start < shapeEnd);
+    if (inside.length > 0 && !links.has(id)) {
+      const rawLabel = code.slice(labelStart, labelEnd);
+      const displayText = normalizeLabel(replaceWikilinks(rawLabel, inside, labelStart));
+      links.set(id, { id, target: inside[0].target, displayText });
+    }
+    NODE_RE.lastIndex = shapeEnd;
+  }
+  let out = "";
+  let last = 0;
+  for (const h of hits) {
+    out += code.slice(last, h.start) + h.display;
+    last = h.end;
+  }
+  out += code.slice(last);
+  const edges = extractEdges(code);
+  return { code: out, links, edges };
+}
+var SKIP_STATEMENT_RE = /^\s*(graph|flowchart|classDef|class|style|linkStyle|interpolate|direction|subgraph|end|click|callback|init|theme|acc|title|section|%%)\b/;
+var ARROW_RE = /-{2,}>?|={2,}>?|-\.-?>?/g;
+var LEADING_ID_RE = /^\s*([A-Za-z_][\w-]*)/;
+function extractEdges(code) {
+  const edges = [];
+  const statements = code.split(/[;\n]/);
+  for (let raw of statements) {
+    if (SKIP_STATEMENT_RE.test(raw)) continue;
+    let line = raw;
+    line = line.replace(WIKILINK_RE, " ");
+    line = line.replace(/"[^"]*"/g, " ");
+    line = line.replace(/\|[^|]*\|/g, " ");
+    line = line.replace(/-\.[^.]*?\.->/g, "-.->");
+    line = line.replace(/-\.[^.]*?\.-/g, "-.-");
+    line = line.replace(/(--|==)\s+[^-=|>][^|]*?\s*\1>?/g, (m2) => m2.includes(">") ? m2.slice(0, 2) + ">" : m2.slice(0, 2));
+    line = line.replace(/\[\([^\])]*\)\]/g, " ");
+    line = line.replace(/[\[\(\{][^\]\)\}]*[\]\)\}]/g, " ");
+    const terms = [];
+    let lastEnd = 0;
+    let m;
+    ARROW_RE.lastIndex = 0;
+    while ((m = ARROW_RE.exec(line)) !== null) {
+      terms.push({ text: line.slice(lastEnd, m.index), directed: m[0].includes(">") });
+      lastEnd = m.index + m[0].length;
+    }
+    if (terms.length === 0) continue;
+    terms.push({ text: line.slice(lastEnd), directed: false });
+    const groups = terms.map(
+      (t) => t.text.split("&").map((s) => LEADING_ID_RE.exec(s)?.[1] ?? "").filter(Boolean)
+    );
+    for (let i = 0; i < groups.length - 1; i++) {
+      const directed = terms[i + 1].directed || terms[i].directed;
+      for (const u of groups[i]) {
+        for (const v of groups[i + 1]) {
+          if (u === v) continue;
+          edges.push({ from: u, to: v, directed });
+        }
+      }
+    }
+  }
+  return edges;
+}
+
+// src/parser.test.ts
+var passed = 0;
+function case1(name, fn) {
+  fn();
+  passed++;
+  console.log(`PASS  ${name}`);
+}
+case1("quoted alias + rounded node", () => {
+  const { code, links } = parseDiagram(
+    'flowchart LR\n  A["[[\u9996\u9875|\u{1F3E0} \u9996\u9875]]"] --> B("[[\u9879\u76EE\u603B\u89C8]]")\n'
+  );
+  import_node_assert.default.strictEqual(links.get("A")?.target, "\u9996\u9875");
+  import_node_assert.default.strictEqual(links.get("A")?.displayText, "\u{1F3E0} \u9996\u9875");
+  import_node_assert.default.strictEqual(links.get("B")?.target, "\u9879\u76EE\u603B\u89C8");
+  import_node_assert.default.strictEqual(links.get("B")?.displayText, "\u9879\u76EE\u603B\u89C8");
+  import_node_assert.default.ok(!code.includes("[["), "wikilink \u5FC5\u987B\u88AB\u66FF\u6362\u6389");
+});
+case1("heading anchor with alias", () => {
+  const { links } = parseDiagram('C{{"[[\u67B6\u6784\u8BBE\u8BA1#\u6570\u636E\u5E93\u6A21\u5757|\u6570\u636E\u5E93\u8BBE\u8BA1]]"}}');
+  import_node_assert.default.strictEqual(links.get("C")?.target, "\u67B6\u6784\u8BBE\u8BA1#\u6570\u636E\u5E93\u6A21\u5757");
+  import_node_assert.default.strictEqual(links.get("C")?.displayText, "\u6570\u636E\u5E93\u8BBE\u8BA1");
+});
+case1("folder path shows basename", () => {
+  const { links } = parseDiagram('D["[[folder/sub/note]]"]');
+  import_node_assert.default.strictEqual(links.get("D")?.target, "folder/sub/note");
+  import_node_assert.default.strictEqual(links.get("D")?.displayText, "note");
+});
+case1("same-file heading", () => {
+  const { links } = parseDiagram('E["[[#\u7AE0\u8282\u4E00]]"]');
+  import_node_assert.default.strictEqual(links.get("E")?.target, "#\u7AE0\u8282\u4E00");
+});
+case1("unquoted simple shapes", () => {
+  const { links } = parseDiagram("A([[\u9996\u9875]]) --> B{{[[\u4F1A\u8BAE\u7EAA\u8981]]}}");
+  import_node_assert.default.strictEqual(links.get("A")?.target, "\u9996\u9875");
+  import_node_assert.default.strictEqual(links.get("B")?.target, "\u4F1A\u8BAE\u7EAA\u8981");
+});
+case1("edge label wikilink not treated as node", () => {
+  const { code, links } = parseDiagram('A["[[a]]"] -->|\u8FDE\u63A5 [[b|B\u7AD9]]| C["[[c]]"]');
+  import_node_assert.default.strictEqual(links.size, 2);
+  import_node_assert.default.ok(links.has("A") && links.has("C"));
+  import_node_assert.default.ok(code.includes("B\u7AD9"));
+  import_node_assert.default.ok(!code.includes("[["));
+});
+case1("comment line ignored", () => {
+  const { links } = parseDiagram('%% A["[[x]]"]\nA["[[real]]"]');
+  import_node_assert.default.strictEqual(links.size, 1);
+  import_node_assert.default.strictEqual(links.get("A")?.target, "real");
+});
+case1("link mixed with other text", () => {
+  const { links } = parseDiagram('A["\u6D41\u7A0B [[note|\u8BE6\u60C5]] \u672B\u5C3E"]');
+  import_node_assert.default.strictEqual(links.get("A")?.target, "note");
+  import_node_assert.default.strictEqual(links.get("A")?.displayText, "\u6D41\u7A0B \u8BE6\u60C5 \u672B\u5C3E");
+});
+case1("many sequential nodes", () => {
+  const src = ["flowchart TD", 'A["[[a]]"]-->B["[[b]]"]', 'C["[[c]]"]-->D["[[d]]"]', 'E["[[e]]"]'].join("\n");
+  const { links } = parseDiagram(src);
+  for (const id of ["A", "B", "C", "D", "E"]) import_node_assert.default.ok(links.has(id), `${id} \u5E94\u88AB\u8BC6\u522B`);
+});
+case1("plain diagram passthrough", () => {
+  const src = "flowchart LR\nA[\u5F00\u59CB]-->B{\u5224\u65AD?}\nB--\u662F-->C[\u7ED3\u675F]";
+  const { code, links } = parseDiagram(src);
+  import_node_assert.default.strictEqual(links.size, 0);
+  import_node_assert.default.strictEqual(code, src);
+});
+case1("all shape kinds", () => {
+  const src = [
+    'A{{"[[a]]"}}',
+    'B(("[[b]]"))',
+    'C[("[[c]]")]',
+    'D>"[[d]]"]'
+  ].join("\n");
+  const { links } = parseDiagram(src);
+  import_node_assert.default.deepStrictEqual([...links.keys()].sort(), ["A", "B", "C", "D"]);
+});
+case1("basic directed edges", () => {
+  const { edges } = parseDiagram("flowchart TD\nA-->B\nB-->C");
+  import_node_assert.default.deepStrictEqual(edges, [
+    { from: "A", to: "B", directed: true },
+    { from: "B", to: "C", directed: true }
+  ]);
+});
+case1("chained and undirected edges", () => {
+  const { edges } = parseDiagram("A-->B-->C\nA---D");
+  import_node_assert.default.strictEqual(edges.length, 3);
+  import_node_assert.default.ok(edges.some((e) => e.from === "A" && e.to === "B" && e.directed));
+  import_node_assert.default.ok(edges.some((e) => e.from === "B" && e.to === "C" && e.directed));
+  const und = edges.find((e) => e.from === "A" && e.to === "D");
+  import_node_assert.default.ok(und && !und.directed);
+});
+case1("edge labels and arrow kinds", () => {
+  const { edges } = parseDiagram("A-->|\u662F| B\nB-.\u5426.->C\nC == text ==> D\nD -.-> E");
+  const pairs = edges.map((e) => `${e.from}${e.to}`).sort();
+  import_node_assert.default.deepStrictEqual(pairs, ["AB", "BC", "CD", "DE"]);
+  import_node_assert.default.ok(edges.every((e) => e.directed));
+});
+case1("ampersand fan-out with shapes", () => {
+  const { edges } = parseDiagram('A["[[x|\u5F00\u59CB]]"] --> B & C("y") & D{{z}}');
+  const tos = edges.map((e) => e.to).sort();
+  import_node_assert.default.deepStrictEqual(tos, ["B", "C", "D"]);
+  import_node_assert.default.ok(edges.every((e) => e.from === "A"));
+});
+case1("non-edge statements skipped", () => {
+  const src = "classDef c fill:#f00\nclass A c\nstyle B fill:#eee\nsubgraph S1\n  A-->B\nend\nlinkStyle 0 stroke:red";
+  const { edges } = parseDiagram(src);
+  import_node_assert.default.strictEqual(edges.length, 1);
+  import_node_assert.default.deepStrictEqual(edges[0], { from: "A", to: "B", directed: true });
+});
+console.log(`
+\u5168\u90E8 ${passed} \u4E2A\u7528\u4F8B\u901A\u8FC7`);

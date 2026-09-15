@@ -1,0 +1,116 @@
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// src/outline.test.ts
+var import_node_assert = __toESM(require("node:assert"));
+
+// src/outline.ts
+function sanitizeLabel(text) {
+  let t = text.replace(
+    /\[\[([^\]|#]*)(#[^\]|]*)?(?:\|([^\]]*))?\]\]/g,
+    (_m, path, _hash, alias) => {
+      if (alias !== void 0) return alias.trim();
+      const p = (path ?? "").trim();
+      const parts = p.split("/");
+      return (parts[parts.length - 1] ?? p).trim();
+    }
+  );
+  t = t.replace(/[*_~`<>]/g, "").replace(/"/g, "'").replace(/\s+/g, " ").trim();
+  return t || "\uFF08\u7A7A\uFF09";
+}
+function outlineToMermaid(roots, rootName, direction = "TB") {
+  const lines = /* @__PURE__ */ new Map();
+  const edges = [];
+  const statements = [];
+  const rootId = "n0";
+  lines.set(rootId, 0);
+  statements.push(`  ${rootId}(["${sanitizeLabel(rootName)}"])`);
+  const walk = (n, parentId) => {
+    lines.set(n.id, n.line);
+    const label = sanitizeLabel(n.text);
+    if (n.kind === "bullet") statements.push(`  ${n.id}("${label}")`);
+    else statements.push(`  ${n.id}["${label}"]`);
+    edges.push({ from: parentId, to: n.id, directed: true });
+    statements.push(`  ${parentId} --> ${n.id}`);
+    n.children.forEach((c) => walk(c, n.id));
+  };
+  roots.forEach((r) => walk(r, rootId));
+  const code = [`flowchart ${direction === "LR" ? "LR" : "TD"}`, ...statements].join("\n");
+  return { code, lines, edges };
+}
+
+// src/outline.test.ts
+var passed = 0;
+function test(name, fn) {
+  fn();
+  passed++;
+  console.log(`ok - ${name}`);
+}
+function node(id, text, line, kind, children = []) {
+  return { id, text, line, level: 0, kind, children };
+}
+test("sanitizeLabel: wikilink \u53D6\u522B\u540D", () => {
+  import_node_assert.default.strictEqual(sanitizeLabel("\u8BE6\u89C1[[\u67B6\u6784\u8BBE\u8BA1|\u67B6\u6784]]\u6587\u6863"), "\u8BE6\u89C1\u67B6\u6784\u6587\u6863");
+});
+test("sanitizeLabel: wikilink \u65E0\u522B\u540D\u53D6\u7B14\u8BB0\u540D", () => {
+  import_node_assert.default.strictEqual(sanitizeLabel("[[folder/\u90E8\u7F72\u624B\u518C]]"), "\u90E8\u7F72\u624B\u518C");
+});
+test("sanitizeLabel: \u5F15\u53F7\u4E0E markdown \u6807\u8BB0\u88AB\u6E05\u7406", () => {
+  import_node_assert.default.strictEqual(sanitizeLabel('a**b**"c" `d`'), "ab'c' d");
+});
+test("sanitizeLabel: \u7A7A\u6587\u672C\u5360\u4F4D", () => {
+  import_node_assert.default.strictEqual(sanitizeLabel("   "), "\uFF08\u7A7A\uFF09");
+});
+test("outlineToMermaid: \u6839\u8282\u70B9 + \u5C42\u7EA7\u8FB9 + \u884C\u53F7\u6620\u5C04", () => {
+  const tree = [
+    node("n1", "\u9700\u6C42\u5206\u6790", 0, "h1", [
+      node("n2", "\u8C03\u7814\u7ADE\u54C1", 1, "bullet", [node("n3", "\u7ADE\u54C1A", 2, "bullet")]),
+      node("n4", "\u65B9\u6848\u8BBE\u8BA1", 4, "h2")
+    ])
+  ];
+  const d = outlineToMermaid(tree, "\u9879\u76EE\u603B\u89C8", "TB");
+  import_node_assert.default.ok(d.code.startsWith("flowchart TD"), d.code);
+  import_node_assert.default.ok(d.code.includes('n0(["\u9879\u76EE\u603B\u89C8"])'));
+  import_node_assert.default.ok(d.code.includes('n1["\u9700\u6C42\u5206\u6790"]'));
+  import_node_assert.default.ok(d.code.includes('n2("\u8C03\u7814\u7ADE\u54C1")'));
+  import_node_assert.default.ok(d.code.includes("n0 --> n1"));
+  import_node_assert.default.ok(d.code.includes("n1 --> n2"));
+  import_node_assert.default.ok(d.code.includes("n2 --> n3"));
+  import_node_assert.default.ok(d.code.includes("n1 --> n4"));
+  import_node_assert.default.deepStrictEqual(Object.fromEntries(d.lines), { n0: 0, n1: 0, n2: 1, n3: 2, n4: 4 });
+  const edgePairs = d.edges.map((e) => `${e.from}>${e.to}`);
+  import_node_assert.default.deepStrictEqual(edgePairs, ["n0>n1", "n1>n2", "n2>n3", "n1>n4"]);
+  import_node_assert.default.ok(d.edges.every((e) => e.directed));
+});
+test("outlineToMermaid: LR \u65B9\u5411", () => {
+  const d = outlineToMermaid([node("n1", "x", 0, "h1")], "r", "LR");
+  import_node_assert.default.ok(d.code.startsWith("flowchart LR"));
+});
+test("outlineToMermaid: \u6807\u7B7E\u4E2D\u7684\u7279\u6B8A\u5B57\u7B26\u4E0D\u4F1A\u7834\u574F\u8BED\u6CD5", () => {
+  const d = outlineToMermaid([node("n1", 'a"b\nc', 0, "h1")], "r");
+  import_node_assert.default.ok(!d.code.includes('"a"b'), d.code);
+  import_node_assert.default.ok(d.code.includes(`n1["a'b c"]`));
+});
+console.log(`
+${passed} outline tests passed`);

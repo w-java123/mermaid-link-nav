@@ -1,0 +1,128 @@
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// src/focus.test.ts
+var import_node_assert = __toESM(require("node:assert"));
+
+// src/focus.ts
+function buildGraph(edges) {
+  const outgoing = /* @__PURE__ */ new Map();
+  const incoming = /* @__PURE__ */ new Map();
+  const add = (map, a, b) => {
+    if (!map.has(a)) map.set(a, /* @__PURE__ */ new Set());
+    map.get(a).add(b);
+  };
+  for (const e2 of edges) {
+    add(outgoing, e2.from, e2.to);
+    add(incoming, e2.to, e2.from);
+    if (!e2.directed) {
+      add(outgoing, e2.to, e2.from);
+      add(incoming, e2.from, e2.to);
+    }
+  }
+  const toList = (m) => {
+    const r = /* @__PURE__ */ new Map();
+    for (const [k, v] of m) r.set(k, [...v]);
+    return r;
+  };
+  return { outgoing: toList(outgoing), incoming: toList(incoming) };
+}
+function bfs(start, adj) {
+  const seen = /* @__PURE__ */ new Set([start]);
+  const queue = [start];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const next of adj.get(cur) ?? []) {
+      if (!seen.has(next)) {
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return seen;
+}
+var edgeKey = (from, to) => `${from}->${to}`;
+function focusSubset(graph, edges, focusId, includeAncestors) {
+  const descendants = bfs(focusId, graph.outgoing);
+  const ancestors = includeAncestors ? bfs(focusId, graph.incoming) : /* @__PURE__ */ new Set([focusId]);
+  const nodes = new Set(descendants);
+  for (const a of ancestors) nodes.add(a);
+  const subTree = descendants;
+  const ancChain = ancestors;
+  const keptEdges = /* @__PURE__ */ new Set();
+  for (const e2 of edges) {
+    if (!nodes.has(e2.from) || !nodes.has(e2.to)) continue;
+    const inSub = subTree.has(e2.from) && subTree.has(e2.to);
+    const inAnc = ancChain.has(e2.from) && ancChain.has(e2.to);
+    if (inSub || inAnc) keptEdges.add(edgeKey(e2.from, e2.to));
+    if (!e2.directed && (inSub || inAnc)) keptEdges.add(edgeKey(e2.to, e2.from));
+  }
+  return { nodes, edges: keptEdges };
+}
+
+// src/focus.test.ts
+var passed = 0;
+function case1(name, fn) {
+  fn();
+  passed++;
+  console.log(`PASS  ${name}`);
+}
+var e = (from, to, directed = true) => ({ from, to, directed });
+var tree = [e("R", "A"), e("A", "A1"), e("A", "A2"), e("R", "B"), e("B", "B1")];
+case1("focus keeps ancestors and descendants", () => {
+  const g = buildGraph(tree);
+  const sub = focusSubset(g, tree, "A", true);
+  import_node_assert.default.deepStrictEqual([...sub.nodes].sort(), ["A", "A1", "A2", "R"]);
+  import_node_assert.default.ok(sub.edges.has(edgeKey("R", "A")));
+  import_node_assert.default.ok(sub.edges.has(edgeKey("A", "A1")));
+  import_node_assert.default.ok(!sub.edges.has(edgeKey("R", "B")));
+});
+case1("focus without ancestors only subtree", () => {
+  const g = buildGraph(tree);
+  const sub = focusSubset(g, tree, "A", false);
+  import_node_assert.default.deepStrictEqual([...sub.nodes].sort(), ["A", "A1", "A2"]);
+  import_node_assert.default.ok(!sub.edges.has(edgeKey("R", "A")));
+});
+case1("focus root keeps whole tree", () => {
+  const g = buildGraph(tree);
+  const sub = focusSubset(g, tree, "R", true);
+  import_node_assert.default.strictEqual(sub.nodes.size, 6);
+  import_node_assert.default.strictEqual(sub.edges.size, 5);
+});
+case1("diamond merge keeps both parents", () => {
+  const dag = [e("X", "M"), e("Y", "M"), e("M", "Z")];
+  const g = buildGraph(dag);
+  const sub = focusSubset(g, dag, "M", true);
+  import_node_assert.default.deepStrictEqual([...sub.nodes].sort(), ["M", "X", "Y", "Z"]);
+  import_node_assert.default.ok(sub.edges.has(edgeKey("X", "M")));
+  import_node_assert.default.ok(sub.edges.has(edgeKey("Y", "M")));
+});
+case1("undirected edge traversable both ways", () => {
+  const g = buildGraph([e("A", "B", false), e("B", "C", true)]);
+  const sub = focusSubset(g, [e("A", "B", false), e("B", "C", true)], "B", false);
+  import_node_assert.default.ok(sub.nodes.has("A"));
+  import_node_assert.default.ok(sub.nodes.has("C"));
+});
+console.log(`
+\u805A\u7126\u7B97\u6CD5\u5168\u90E8 ${passed} \u4E2A\u7528\u4F8B\u901A\u8FC7`);
