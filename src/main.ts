@@ -15,7 +15,7 @@ import mermaid from 'mermaid';
 import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
-import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
+import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
 import { addNode, deleteNode, editNode, updateNoteSource } from './diagram-edit';
 import { NodeEditModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
@@ -29,6 +29,19 @@ function simpleHash(s: string): string {
     h = ((h << 5) - h + s.charCodeAt(i)) | 0;
   }
   return h.toString(36);
+}
+
+/** 从节点位置提取纯文本标签（去掉 [[wikilink]] 语法，保留显示名/别名） */
+function extractNodeLabel(source: string, node: NodeInfo): string {
+  const raw = source.slice(node.labelStart, node.labelEnd);
+  return raw
+    .replace(/\[\[([^\]|#]*)(#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (_, path, hash, alias) => {
+      if (alias) return alias;
+      const p = (path || '').trim();
+      const parts = p.split('/');
+      return (parts[parts.length - 1] || p) + (hash || '');
+    })
+    .trim();
 }
 
 type ThemeMode = 'auto' | 'default' | 'dark' | 'forest' | 'neutral';
@@ -284,10 +297,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
         menu.addItem((item) =>
           item.setTitle('添加节点').onClick(() => {
             const parsed = parseDiagram(diagramSource);
-            const allIds = parsed.nodes.map((n) => n.id);
+            const nodeOptions = parsed.nodes.map((n) => ({
+              id: n.id,
+              label: extractNodeLabel(diagramSource, n),
+            }));
             new NodeEditModal(this.app, {
               title: '添加节点',
-              existingNodeIds: allIds,
+              nodeOptions,
               showConnectFrom: true,
               onSubmit: async (result) => {
                 const { newSource } = addNode(diagramSource, {

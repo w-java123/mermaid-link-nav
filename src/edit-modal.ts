@@ -10,11 +10,16 @@ export interface NodeEditResult {
   connectFrom?: string;
 }
 
+export interface NodeOption {
+  id: string;
+  label: string;
+}
+
 export class NodeEditModal extends Modal {
   private result: NodeEditResult;
   private readonly onSubmit: (result: NodeEditResult) => void;
   private readonly isEdit: boolean;
-  private readonly existingNodeIds: string[];
+  private readonly nodeOptions: NodeOption[];
 
   constructor(
     app: App,
@@ -22,7 +27,7 @@ export class NodeEditModal extends Modal {
       title: string;
       initialLabel?: string;
       initialLink?: string;
-      existingNodeIds?: string[];
+      nodeOptions?: NodeOption[];
       showConnectFrom?: boolean;
       onSubmit: (result: NodeEditResult) => void;
     },
@@ -31,11 +36,11 @@ export class NodeEditModal extends Modal {
     this.result = {
       label: opts.initialLabel ?? '',
       link: opts.initialLink ?? '',
-      connectFrom: opts.existingNodeIds?.[0],
+      connectFrom: opts.nodeOptions?.[0]?.id,
     };
     this.onSubmit = opts.onSubmit;
     this.isEdit = !opts.showConnectFrom;
-    this.existingNodeIds = opts.existingNodeIds ?? [];
+    this.nodeOptions = opts.nodeOptions ?? [];
   }
 
   onOpen(): void {
@@ -65,13 +70,16 @@ export class NodeEditModal extends Modal {
           }),
       );
 
-    if (!this.isEdit && this.existingNodeIds.length > 0) {
+    if (!this.isEdit && this.nodeOptions.length > 0) {
       new Setting(contentEl)
         .setName('从哪个节点连过来')
         .setDesc('新节点将作为所选节点的下游。选"不连线"则创建孤立节点。')
         .addDropdown((dd) => {
           dd.addOption('', '不连线');
-          this.existingNodeIds.forEach((id) => dd.addOption(id, id));
+          this.nodeOptions.forEach((n) => {
+            const display = n.label ? `${n.label}（${n.id}）` : n.id;
+            dd.addOption(n.id, display);
+          });
           dd.setValue(this.result.connectFrom ?? '');
           dd.onChange((v) => {
             this.result.connectFrom = v || undefined;
