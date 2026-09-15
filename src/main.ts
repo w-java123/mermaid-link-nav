@@ -267,6 +267,25 @@ export default class MermaidLinkNavPlugin extends Plugin {
         if (nodeId && knownIds.has(nodeId)) {
           const link = links.get(nodeId);
 
+          // 添加父节点（新节点作为当前节点的上游）
+          menu.addItem((item) =>
+            item.setTitle('添加父节点').onClick(() => {
+              new NodeEditModal(this.app, {
+                title: '添加父节点',
+                showConnectFrom: false,
+                onSubmit: async (result) => {
+                  const { newSource } = addNode(diagramSource, {
+                    label: result.label,
+                    link: result.link || undefined,
+                    connectTo: nodeId,
+                  });
+                  const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                  if (!ok) new Notice('添加父节点失败');
+                },
+              }).open();
+            }),
+          );
+
           // 添加子节点（默认以当前节点为上游）
           menu.addItem((item) =>
             item.setTitle('添加子节点').onClick(() => {

@@ -21,8 +21,10 @@ export type NodeShapeType = (typeof NODE_SHAPES)[number]['type'];
 export interface AddNodeOptions {
   label: string;
   link?: string;
-  /** 从哪个现有节点连到新节点，留空则不连线 */
+  /** 从哪个现有节点连到新节点（FROM --> NEW），留空则不连线 */
   connectFrom?: string;
+  /** 新节点连到哪个现有节点（NEW --> TO），用于添加父节点 */
+  connectTo?: string;
 }
 
 export interface EditNodeOptions {
@@ -57,6 +59,9 @@ export function addNode(source: string, opts: AddNodeOptions): { newSource: stri
   let addition = `\n${nodeDef}`;
   if (opts.connectFrom) {
     addition += `\n${opts.connectFrom} --> ${newId}`;
+  }
+  if (opts.connectTo) {
+    addition += `\n${newId} --> ${opts.connectTo}`;
   }
   // 去掉末尾空白后追加，保证源码整洁
   const newSource = source.replace(/\s+$/, '') + addition + '\n';
