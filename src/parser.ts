@@ -29,10 +29,28 @@ export interface FlowEdge {
   directed: boolean;
 }
 
+export interface NodeInfo {
+  id: string;
+  /** 节点定义在源码中的起始位置（含 id） */
+  start: number;
+  /** 节点定义在源码中的结束位置（不含，即闭括号后） */
+  end: number;
+  /** 标签文本起始位置 */
+  labelStart: number;
+  /** 标签文本结束位置（不含闭括号） */
+  labelEnd: number;
+  /** 形状开括号，如 "["、"("、"{" */
+  opener: string;
+  /** 形状闭括号 */
+  closer: string;
+}
+
 export interface ParsedDiagram {
   code: string;
   links: Map<string, NodeLink>;
   edges: FlowEdge[];
+  /** 所有节点定义的位置信息，用于源码编辑 */
+  nodes: NodeInfo[];
 }
 
 /** [[路径#标题|别名]]，路径与标题均可为空（[[#标题]] 表示当前笔记内跳转） */
@@ -137,6 +155,7 @@ export function parseDiagram(code: string): ParsedDiagram {
 
   const hits = collectWikilinks(code);
   const links = new Map<string, NodeLink>();
+  const nodes: NodeInfo[] = [];
   const claimed: Array<[number, number]> = [];
 
   // 2. 扫描所有节点形状
@@ -159,6 +178,7 @@ export function parseDiagram(code: string): ParsedDiagram {
     let labelStart = p;
     let labelEnd = -1;
     let shapeEnd = -1;
+    let closer = '';
 
     if (code[p] === '"') {
       labelStart = p + 1;
@@ -171,18 +191,28 @@ export function parseDiagram(code: string): ParsedDiagram {
       labelEnd = q; // 不含闭合引号
       let c = q + 1;
       while (c < code.length && /\s/.test(code[c]!) ) c++;
-      const closer = shape.closers.find((cl) => code.startsWith(cl, c));
-      if (!closer) continue;
+      const found = shape.closers.find((cl) => code.startsWith(cl, c));
+      if (!found) continue;
+      closer = found;
       shapeEnd = c + closer.length;
     } else {
       const closeStart = findClosers(code, labelStart, shape.closers, hits);
       if (closeStart < 0) continue;
       labelEnd = closeStart;
-      const closer = shape.closers.find((cl) => code.startsWith(cl, closeStart))!;
+      closer = shape.closers.find((cl) => code.startsWith(cl, closeStart))!;
       shapeEnd = closeStart + closer.length;
     }
 
     claimed.push([matchStart, shapeEnd]);
+    nodes.push({
+      id,
+      start: matchStart,
+      end: shapeEnd,
+      labelStart,
+      labelEnd,
+      opener: token,
+      closer: closer,
+    });
 
     // wikilink 起点落在该节点标签区间内即归属该节点，第一个作为跳转目标
     const inside = hits.filter((h) => h.start >= labelStart && h.start < shapeEnd);
@@ -205,7 +235,7 @@ export function parseDiagram(code: string): ParsedDiagram {
 
   const edges = extractEdges(code);
 
-  return { code: out, links, edges };
+  return { code: out, links, edges, nodes };
 }
 
 /* ---------------- 边（连线）解析，用于双击聚焦 ---------------- */

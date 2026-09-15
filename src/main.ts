@@ -2,6 +2,7 @@ import {
   App,
   MarkdownPostProcessorContext,
   MarkdownView,
+  Menu,
   Notice,
   PaneType,
   Plugin,
@@ -15,6 +16,8 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
+import { addNode, deleteNode, editNode, updateNoteSource } from './diagram-edit';
+import { NodeEditModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
 const PLUGIN_ID = 'mermaid-link-nav';
@@ -239,6 +242,68 @@ export default class MermaidLinkNavPlugin extends Plugin {
       const cacheKey = `${sourcePath}:${simpleHash(diagramSource)}`;
       new PanZoomController(svg, {}, cacheKey);
     }
+
+    // 右键菜单：添加节点 / 编辑节点 / 删除节点
+    wrapper.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      const g = (ev.target as Element)?.closest('g.node') as SVGGElement | null;
+      const menu = new Menu();
+
+      if (g) {
+        const nodeId = extractNodeId(g, renderId);
+        if (nodeId && knownIds.has(nodeId)) {
+          const link = links.get(nodeId);
+          menu.addItem((item) =>
+            item.setTitle('编辑节点').onClick(() => {
+              const currentLabel = link?.displayText ?? (g.textContent ?? '').trim();
+              const currentLink = link?.target ?? '';
+              new NodeEditModal(this.app, {
+                title: '编辑节点',
+                initialLabel: currentLabel,
+                initialLink: currentLink,
+                onSubmit: async (result) => {
+                  const newSource = editNode(diagramSource, nodeId, {
+                    label: result.label,
+                    link: result.link || undefined,
+                  });
+                  const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                  if (!ok) new Notice('更新笔记失败');
+                },
+              }).open();
+            }),
+          );
+          menu.addItem((item) =>
+            item.setTitle('删除节点').onClick(async () => {
+              const newSource = deleteNode(diagramSource, nodeId);
+              const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+              if (!ok) new Notice('删除节点失败');
+            }),
+          );
+        }
+      } else {
+        menu.addItem((item) =>
+          item.setTitle('添加节点').onClick(() => {
+            const parsed = parseDiagram(diagramSource);
+            const allIds = parsed.nodes.map((n) => n.id);
+            new NodeEditModal(this.app, {
+              title: '添加节点',
+              existingNodeIds: allIds,
+              showConnectFrom: true,
+              onSubmit: async (result) => {
+                const { newSource } = addNode(diagramSource, {
+                  label: result.label,
+                  link: result.link || undefined,
+                  connectFrom: result.connectFrom,
+                });
+                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                if (!ok) new Notice('添加节点失败');
+              },
+            }).open();
+          }),
+        );
+      }
+      menu.showAtMouseEvent(ev);
+    });
 
     // 双击聚焦控制器
     let controller: DiagramFocusController | null = null;
