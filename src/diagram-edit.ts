@@ -109,9 +109,9 @@ const ANY_NODE_DEF_RE = /^\s*[A-Za-z_][\w-]*\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\
 /** 箭头后是否紧跟目标节点定义（--> G["..."]） */
 const TARGET_DEF_RE = /-->\s*[A-Za-z_][\w-]*\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])/;
 
-/** 提取行首的 flowchart/graph 指令前缀，返回 [前缀, 剩余内容] */
+/** 提取行首的 %%{init}%% + flowchart/graph 指令前缀，返回 [前缀, 剩余内容] */
 function splitDirPrefix(line: string): [string, string] {
-  const m = line.match(/^\s*(flowchart|graph)\s+\w+\s*/);
+  const m = line.match(/^\s*(%%\{.*?\}%%\s*)?(flowchart|graph)\s+\w+\s*/);
   if (m) return [m[0], line.slice(m[0].length)];
   return ['', line];
 }
@@ -243,7 +243,7 @@ export function setAsDecision(
         insertPos = noNode2.start;
       } else {
         // 否目标无定义或前有入边，放到 flowchart 指令之后
-        const dirMatch = result.match(/^\s*(%%\{[^}]*\}%%\s*)?(flowchart|graph)\s+\w+\s*/);
+        const dirMatch = result.match(/^\s*(%%\{.*?\}%%\s*)?(flowchart|graph)\s+\w+\s*/);
         if (dirMatch) insertPos = dirMatch[0].length;
       }
       if (insertPos >= 0) {

@@ -73,7 +73,7 @@ const SHAPES: { opener: string; closers: string[] }[] = [
 /** 候选节点：节点 id + 形状开括号 */
 const NODE_RE = /(?:^|[^\w])([A-Za-z_][\w-]*)\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])/g;
 
-const COMMENT_RE = /%%[^\n]*/g;
+const COMMENT_RE = /(?<!\})%%(?!\{)[^\n]*/g;
 
 function basename(path: string): string {
   const parts = path.split('/');
