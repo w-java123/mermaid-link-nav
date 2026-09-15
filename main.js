@@ -3601,7 +3601,7 @@ ${e} --> ${r}`;return t.replace(/\s+$/,"")+n+`
 
 `)}function V$e(t,e,r,n){if(e===r)return t;let i=`
 ${e} -->|${n}| ${r}`;return t.replace(/\s+$/,"")+i+`
-`}function Y$e(t,e,r,n){let i=lZ(t,e,"diamond");i=hZ(i,e);let a=zl(i),s=a.nodes.find(l=>l.id===r),o=a.nodes.find(l=>l.id===n);if(s&&o&&s.start>o.start){let l=i.slice(0,s.start);if(!/-->\s*$/.test(l)){let u=i.slice(s.start,s.end);i=i.slice(0,s.start)+i.slice(s.end);let d=zl(i).nodes.find(f=>f.id===n);d&&(i=i.slice(0,d.start)+u+" "+i.slice(d.start))}}return i=V$e(i,e,r,"\u662F"),i=V$e(i,e,n,"\u5426"),r!==n&&(i=i.replace(/\s+$/,"")+`
+`}function Y$e(t,e,r,n){let i=lZ(t,e,"diamond");i=hZ(i,e);let a=zl(i),s=a.nodes.find(l=>l.id===r),o=a.nodes.find(l=>l.id===n);if(s&&o&&s.start>o.start){let l=i.slice(0,s.start);if(!/-->\s*$/.test(l)){let u=i.slice(s.start,s.end);i=i.slice(0,s.start)+i.slice(s.end);let d=zl(i).nodes.find(f=>f.id===n);if(d){let f=i.slice(0,d.start);if(/-->\s*$/.test(f)){let p=i.match(/^\s*(%%\{[^}]*\}%%\s*)?(flowchart|graph)\s+\w+\s*/);if(p){let g=p[0].length;i=i.slice(0,g)+u+" "+i.slice(g)}}else i=i.slice(0,d.start)+u+" "+i.slice(d.start)}}}return i=V$e(i,e,r,"\u662F"),i=V$e(i,e,n,"\u5426"),r!==n&&(i=i.replace(/\s+$/,"")+`
 ${r} ~~~ ${n}
 `),i}function X$e(t,e,r){if(e===r)return t;let n=uZ(t,e);return n=cZ(n,r,e),n}function j$e(t,e){let n=zl(t).nodes.find(u=>u.id===e);if(!n)return t;let i=n.start;for(;i>0&&t[i-1]!==`
 `;)i--;let a=n.end;for(;a<t.length&&t[a]!==`

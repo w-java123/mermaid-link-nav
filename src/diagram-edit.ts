@@ -223,15 +223,28 @@ export function setAsDecision(
   if (yesNode && noNode && yesNode.start > noNode.start) {
     // 是目标定义在否目标后面，需要前移
     const beforeYes = result.slice(0, yesNode.start);
-    // 只有定义前没有入边时才移动，避免破坏连线
-    if (!/-->\s*$/.test(beforeYes)) {
+    // 是目标定义前有入边则不移动（避免破坏连线）
+    if (/-->\s*$/.test(beforeYes)) {
+      // 跳过移动
+    } else {
       const yesDef = result.slice(yesNode.start, yesNode.end);
       result = result.slice(0, yesNode.start) + result.slice(yesNode.end);
       // 重新定位否目标
       const parsed2 = parseDiagram(result);
       const noNode2 = parsed2.nodes.find((n) => n.id === noTarget);
       if (noNode2) {
-        result = result.slice(0, noNode2.start) + yesDef + ' ' + result.slice(noNode2.start);
+        const beforeNo = result.slice(0, noNode2.start);
+        if (/-->\s*$/.test(beforeNo)) {
+          // 否目标定义前有入边，插入会产生意外边，改放到 flowchart 指令之后
+          const dirMatch = result.match(/^\s*(%%\{[^}]*\}%%\s*)?(flowchart|graph)\s+\w+\s*/);
+          if (dirMatch) {
+            const insertPos = dirMatch[0].length;
+            result = result.slice(0, insertPos) + yesDef + ' ' + result.slice(insertPos);
+          }
+        } else {
+          // 安全插入到否目标前面
+          result = result.slice(0, noNode2.start) + yesDef + ' ' + result.slice(noNode2.start);
+        }
       }
     }
   }
