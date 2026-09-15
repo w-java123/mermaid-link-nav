@@ -10,3 +10,5 @@ node_modules/
 .t3.cjs
 .t4.cjs
 .DS_Store
+AI_tests/
+*.cjs
