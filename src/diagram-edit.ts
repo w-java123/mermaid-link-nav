@@ -247,7 +247,7 @@ export function setAsDecision(
         if (dirMatch) insertPos = dirMatch[0].length;
       }
       if (insertPos >= 0) {
-        result = result.slice(0, insertPos) + yesDef + ' ' + result.slice(insertPos);
+        result = result.slice(0, insertPos) + yesDef + '; ' + result.slice(insertPos);
       }
     }
   }
