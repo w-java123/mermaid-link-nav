@@ -91,9 +91,9 @@ export function changeNodeShape(source: string, nodeId: string, shapeType: NodeS
 
   const idAndOpener = source.slice(node.start, node.labelStart);
   const label = source.slice(node.labelStart, node.labelEnd);
-  // 去掉原 opener（含前导空白），拼接新 opener + 标签 + 新 closer
-  const cleaned = idAndOpener.replace(/\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])\s*$/, '');
-  const newDef = `${cleaned}${shape.opener}${label}${shape.closer}`;
+  // 去掉原 opener 及后面的空白/可选引号，统一用引号包裹标签
+  const cleaned = idAndOpener.replace(/(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])\s*"?$/, '');
+  const newDef = `${cleaned}${shape.opener}"${label}"${shape.closer}`;
   return source.slice(0, node.start) + newDef + source.slice(node.end);
 }
 
@@ -139,6 +139,66 @@ export function removeIncomingEdges(source: string, nodeId: string): string {
     }
   }
   return result.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/** 删除节点的所有出边（nodeId --> X），保留节点定义 */
+export function removeOutgoingEdges(source: string, nodeId: string): string {
+  const parsed = parseDiagram(source);
+  const node = parsed.nodes.find((n) => n.id === nodeId);
+  let src = source;
+
+  // 1. 节点定义与出边同行：F["名称"] --> C，用位置精确删除出边段
+  if (node) {
+    let lineEnd = src.indexOf('\n', node.end);
+    if (lineEnd === -1) lineEnd = src.length;
+    const afterDef = src.slice(node.end, lineEnd);
+    if (/-->/.test(afterDef)) {
+      const cleaned = afterDef.replace(/-->\s*[A-Za-z_][\w-]*/g, '').replace(/\s*-->\s*$/, '').trimEnd();
+      src = src.slice(0, node.end) + cleaned + src.slice(lineEnd);
+    }
+  }
+
+  // 2. 按行处理纯出边行和链式边
+  const lines = src.split('\n');
+  const result: string[] = [];
+  const pureOutRe = new RegExp(`^\\s*${nodeId}\\s*-->`);
+  const chainRe = new RegExp(`-->\\s*${nodeId}\\s*-->`);
+
+  for (const line of lines) {
+    if (/^\s*(%%|graph|flowchart|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
+      result.push(line);
+      continue;
+    }
+    if (pureOutRe.test(line)) continue; // 纯出边行 nodeId --> X，删除
+    if (chainRe.test(line)) {
+      // 链式 A --> nodeId --> C，改成 A --> nodeId
+      result.push(line.replace(new RegExp(`-->\\s*${nodeId}\\s*-->.*$`), `--> ${nodeId}`));
+    } else {
+      result.push(line);
+    }
+  }
+  return result.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
+/** 添加带标签的边：from -->|label| to */
+export function addLabeledEdge(source: string, from: string, to: string, label: string): string {
+  if (from === to) return source;
+  const edge = `\n${from} -->|${label}| ${to}`;
+  return source.replace(/\s+$/, '') + edge + '\n';
+}
+
+/** 设置为判断节点：改菱形 + 删除原有出边 + 添加 是/否 两条带标签出边 */
+export function setAsDecision(
+  source: string,
+  nodeId: string,
+  yesTarget: string,
+  noTarget: string,
+): string {
+  let result = changeNodeShape(source, nodeId, 'diamond');
+  result = removeOutgoingEdges(result, nodeId);
+  result = addLabeledEdge(result, nodeId, yesTarget, '是');
+  result = addLabeledEdge(result, nodeId, noTarget, '否');
+  return result;
 }
 
 /** 替换节点的父节点：删除原有入边，建立 parentId --> nodeId */

@@ -16,7 +16,7 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
-import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, setParent, updateNoteSource } from './diagram-edit';
+import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, setAsDecision, setParent, updateNoteSource } from './diagram-edit';
 import { NodeEditModal, NodeSelectModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
@@ -314,6 +314,25 @@ export default class MermaidLinkNavPlugin extends Plugin {
                   const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
                   if (!ok) new Notice('更新笔记失败');
                 },
+              }).open();
+            }),
+          );
+
+          // 设置为判断节点（菱形 + 是/否两条出边）
+          menu.addItem((item) =>
+            item.setTitle('设置为判断节点').onClick(() => {
+              const parsed = parseDiagram(diagramSource);
+              const nodeOptions = parsed.nodes
+                .filter((n) => n.id !== nodeId)
+                .map((n) => ({ id: n.id, label: extractNodeLabel(diagramSource, n) }));
+              // 先选「是」的目标
+              new NodeSelectModal(this.app, nodeOptions, (yesId) => {
+                // 再选「否」的目标
+                new NodeSelectModal(this.app, nodeOptions, async (noId) => {
+                  const newSource = setAsDecision(diagramSource, nodeId, yesId, noId);
+                  const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                  if (!ok) new Notice('设置判断节点失败');
+                }).open();
               }).open();
             }),
           );
