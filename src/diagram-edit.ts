@@ -109,6 +109,13 @@ const ANY_NODE_DEF_RE = /^\s*[A-Za-z_][\w-]*\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\
 /** 箭头后是否紧跟目标节点定义（--> G["..."]） */
 const TARGET_DEF_RE = /-->\s*[A-Za-z_][\w-]*\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])/;
 
+/** 提取行首的 flowchart/graph 指令前缀，返回 [前缀, 剩余内容] */
+function splitDirPrefix(line: string): [string, string] {
+  const m = line.match(/^\s*(flowchart|graph)\s+\w+\s*/);
+  if (m) return [m[0], line.slice(m[0].length)];
+  return ['', line];
+}
+
 /** 删除节点的所有入边（X --> nodeId），保留节点定义，链式边自动跳过中间节点 */
 export function removeIncomingEdges(source: string, nodeId: string): string {
   const lines = source.split('\n');
@@ -117,28 +124,33 @@ export function removeIncomingEdges(source: string, nodeId: string): string {
   const outEdgeRe = new RegExp(`${nodeId}\\s*-->`);
   const selfDefRe = new RegExp(`${nodeId}\\s*(\\[\\[|\\[\\(|\\(\\(|\\{\\{|\\[\\/|\\[\\\\|[\\[\\(\\{>])`);
 
-  for (const line of lines) {
-    if (/^\s*(%%|graph|flowchart|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
-      result.push(line);
+  for (const rawLine of lines) {
+    const [prefix, line] = splitDirPrefix(rawLine);
+    if (/^\s*(%%|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
+      result.push(rawLine);
       continue;
     }
     if (inEdgeRe.test(line)) {
       if (selfDefRe.test(line)) {
-        // C --> D["标签"]：删掉入边段 C -->，保留 D 的节点定义
-        const modified = line.replace(new RegExp(`^.*?-->\\s*${nodeId}`), nodeId);
-        if (modified.trim()) result.push(modified);
+        // C --> D["标签"]：只删掉紧邻 D 前的 源 -->，保留 D 的定义和前面其他语句
+        const modified = line.replace(
+          new RegExp(`[A-Za-z_][\\w-]*\\s*-->\\s*${nodeId}`),
+          nodeId,
+        );
+        if (modified.trim()) result.push(prefix + modified);
       } else if (outEdgeRe.test(line)) {
         // 链式边 A --> D --> C，改成 A --> C
         const modified = line.replace(new RegExp(`-->\\s*${nodeId}\\s*-->`, 'g'), '-->');
-        result.push(modified);
+        result.push(prefix + modified);
       } else if (ANY_NODE_DEF_RE.test(line)) {
         // C["名称"] --> D：删掉 --> D 及之后，保留 C 的节点定义
         const modified = line.replace(new RegExp(`-->\\s*${nodeId}.*$`), '').trimEnd();
-        if (modified.trim()) result.push(modified);
+        if (modified.trim()) result.push(prefix + modified);
       }
-      // 纯入边行 A --> D，整行删除
+      // 纯入边行 A --> D，整行删除（但保留 prefix）
+      else if (prefix) result.push(prefix.trimEnd());
     } else {
-      result.push(line);
+      result.push(prefix + line);
     }
   }
   return result.join('\n').replace(/\n{3,}/g, '\n\n');
@@ -152,27 +164,36 @@ export function removeOutgoingEdges(source: string, nodeId: string): string {
   const pureOutRe = new RegExp(`^\\s*${nodeId}\\s*-->`);
   const chainRe = new RegExp(`-->\\s*${nodeId}\\s*-->`);
 
-  for (const line of lines) {
-    if (/^\s*(%%|graph|flowchart|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
-      result.push(line);
+  for (const rawLine of lines) {
+    const [prefix, line] = splitDirPrefix(rawLine);
+    if (/^\s*(%%|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
+      result.push(rawLine);
       continue;
     }
     if (selfDefRe.test(line) && /-->/.test(line)) {
-      // F["名称"] --> G：删除出边段，保留节点定义
-      const modified = line.replace(/-->\s*[A-Za-z_][\w-]*/g, '').replace(/\s*-->\s*$/, '').trimEnd();
-      if (modified.trim()) result.push(modified);
+      // F["名称"] --> G：只删 nodeId 的出边，不删入边
+      // 出边+目标定义同行：nodeId --> G["定义"] → 保留 G["定义"]
+      let modified = line.replace(
+        new RegExp(`${nodeId}\\s*-->\\s*(?=[A-Za-z_][\\w-]*\\s*(\\[\\[|\\[\\(|\\(\\(|\\{\\{|\\[\\/|\\[\\\\|[\\[\\(\\{>]))`, 'g'),
+        '',
+      );
+      // 纯出边：nodeId --> G → 删除
+      modified = modified.replace(new RegExp(`${nodeId}\\s*-->\\s*[A-Za-z_][\\w-]*`, 'g'), '');
+      modified = modified.replace(/\s*-->\s*$/, '').trimEnd();
+      if (modified.trim()) result.push(prefix + modified);
+      else if (prefix) result.push(prefix.trimEnd());
     } else if (pureOutRe.test(line) && TARGET_DEF_RE.test(line)) {
       // F --> G["名称"]：删掉 F -->，保留 G 的节点定义
       const modified = line.replace(new RegExp(`^\\s*${nodeId}\\s*-->\\s*`), '');
-      if (modified.trim()) result.push(modified);
+      if (modified.trim()) result.push(prefix + modified);
     } else if (pureOutRe.test(line)) {
-      // 纯出边行 F --> G，删除
-      continue;
+      // 纯出边行 F --> G，删除（保留 prefix）
+      if (prefix) result.push(prefix.trimEnd());
     } else if (chainRe.test(line)) {
       // 链式 A --> F --> G，改成 A --> F
-      result.push(line.replace(new RegExp(`-->\\s*${nodeId}\\s*-->.*$`), `--> ${nodeId}`));
+      result.push(prefix + line.replace(new RegExp(`-->\\s*${nodeId}\\s*-->.*$`), `--> ${nodeId}`));
     } else {
-      result.push(line);
+      result.push(prefix + line);
     }
   }
   return result.join('\n').replace(/\n{3,}/g, '\n\n');
