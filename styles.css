@@ -1,0 +1,197 @@
+/* Mermaid Link Navigator 样式 */
+
+.mermaid-link-wrapper {
+  position: relative;
+  overflow-x: auto;
+  line-height: 1.4;
+}
+
+.mermaid-link-wrapper g.node {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 聚焦时的复位按钮 */
+.mln-reset-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  opacity: 0.92;
+}
+
+.mln-reset-btn:hover {
+  opacity: 1;
+}
+
+/* 当前聚焦根节点描边强调 */
+.mermaid-link-wrapper g.node.mln-focus-root rect,
+.mermaid-link-wrapper g.node.mln-focus-root polygon,
+.mermaid-link-wrapper g.node.mln-focus-root circle,
+.mermaid-link-wrapper g.node.mln-focus-root ellipse,
+.mermaid-link-wrapper g.node.mln-focus-root path.label-container {
+  stroke: var(--interactive-accent);
+  stroke-width: 2px;
+}
+
+.mermaid-link-wrapper[data-mln-state='loading'] {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  padding: 1em 0;
+}
+
+.mermaid-link-wrapper[data-mln-state='loading']::before {
+  content: 'Mermaid 图表渲染中…';
+}
+
+.mermaid-link-wrapper svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 可点击节点 */
+.mermaid-link-wrapper g.node.mermaid-link-node {
+  cursor: pointer;
+}
+
+.mermaid-link-wrapper g.node.mermaid-link-node:focus {
+  outline: none;
+}
+
+.mermaid-link-wrapper g.node.mermaid-link-node:focus .nodeLabel,
+.mermaid-link-wrapper g.node.mermaid-link-node:focus label {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 悬停高亮 */
+.mermaid-link-wrapper g.node.mln-hover-highlight:hover {
+  filter: drop-shadow(0 0 4px var(--interactive-accent));
+}
+
+.mermaid-link-wrapper g.node.mln-hover-highlight:hover .nodeLabel,
+.mermaid-link-wrapper g.node.mln-hover-highlight:hover label {
+  color: var(--link-color);
+}
+
+/* 目标笔记不存在（与 Obsidian 未解析链接风格一致） */
+.mermaid-link-wrapper g.node.mermaid-link-node.is-unresolved rect,
+.mermaid-link-wrapper g.node.mermaid-link-node.is-unresolved polygon,
+.mermaid-link-wrapper g.node.mermaid-link-node.is-unresolved circle,
+.mermaid-link-wrapper g.node.mermaid-link-node.is-unresolved ellipse,
+.mermaid-link-wrapper g.node.mermaid-link-node.is-unresolved path.label-container {
+  stroke-dasharray: 5 3;
+}
+
+.mermaid-link-wrapper g.node.mermaid-link-node.is-unresolved .nodeLabel,
+.mermaid-link-wrapper g.node.mermaid-link-node.is-unresolved label {
+  color: var(--text-muted);
+}
+
+/* ============ 笔记大纲流程图视图 ============ */
+
+.mln-outline-view {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mln-outline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary-alt);
+}
+
+.mln-outline-btn {
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s, 4px);
+  padding: 3px 10px;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mln-outline-btn:hover {
+  background: var(--interactive-hover);
+}
+
+.mln-outline-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.mln-outline-stage {
+  flex: 1;
+  overflow: auto;
+  padding: 14px;
+}
+.mln-outline-stage:focus {
+  outline: none;
+}
+
+.mln-outline-wrapper svg {
+  max-width: none;
+  min-width: 100%;
+  height: auto;
+}
+
+/* 根节点（笔记名）强调 */
+.mln-outline-wrapper g.node.mln-outline-root rect,
+.mln-outline-wrapper g.node.mln-outline-root polygon,
+.mln-outline-wrapper g.node.mln-outline-root circle,
+.mln-outline-wrapper g.node.mln-outline-root ellipse,
+.mln-outline-wrapper g.node.mln-outline-root path.label-container {
+  fill: var(--interactive-accent) !important;
+  stroke: var(--interactive-accent) !important;
+}
+.mln-outline-wrapper g.node.mln-outline-root .nodeLabel,
+.mln-outline-wrapper g.node.mln-outline-root label,
+.mln-outline-wrapper g.node.mln-outline-root foreignObject {
+  color: var(--text-on-accent);
+}
+
+.mln-outline-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  padding: 2em 1em;
+  text-align: center;
+}
+
+/* 含子节点的节点：加粗边框提示可双击展开 */
+.mln-outline-wrapper g.node.mln-has-children rect,
+.mln-outline-wrapper g.node.mln-has-children polygon,
+.mln-outline-wrapper g.node.mln-has-children path.label-container {
+  stroke-width: 1.6px;
+}
+
+/* 渲染错误 */
+.mermaid-link-error-title {
+  font-weight: 600;
+  color: var(--text-error);
+  margin-bottom: 0.4em;
+}
+
+.mermaid-link-error-msg {
+  font-family: var(--font-monospace, monospace);
+  font-size: var(--font-ui-smaller);
+  white-space: pre-wrap;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border-radius: 6px;
+  padding: 0.6em 0.8em;
+}

@@ -1,0 +1,34 @@
+{
+  "name": "obsidian-mermaid-link-nav",
+  "version": "1.3.1",
+  "description": "Obsidian plugin: render Mermaid diagrams with clickable wikilink nodes.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "build:fast": "node esbuild.config.mjs production",
+    "test:parser": "esbuild src/parser.test.ts --bundle --platform=node --format=cjs --outfile=.tmp-test.cjs && node .tmp-test.cjs && del .tmp-test.cjs",
+    "test:focus": "esbuild src/focus.test.ts --bundle --platform=node --format=cjs --outfile=.tmp-focus.cjs && node .tmp-focus.cjs && del .tmp-focus.cjs",
+    "test:outline": "esbuild src/outline.test.ts --bundle --platform=node --format=cjs --outfile=.tmp-outline.cjs && node .tmp-outline.cjs && del .tmp-outline.cjs",
+    "test:outline-smoke": "esbuild src/outline-smoke.test.ts --bundle --platform=node --format=cjs --external:mermaid --external:jsdom --outfile=.tmp-os.cjs && node .tmp-os.cjs && del .tmp-os.cjs",
+    "test:smoke": "esbuild src/smoke.test.ts --bundle --platform=node --format=cjs --external:mermaid --external:jsdom --outfile=.tmp-smoke.cjs && node .tmp-smoke.cjs && del .tmp-smoke.cjs"
+  },
+  "keywords": [
+    "obsidian",
+    "mermaid",
+    "wikilink",
+    "flowchart"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "mermaid": "^11.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.0",
+    "jsdom": "^30.0.1",
+    "obsidian": "^1.7.2",
+    "typescript": "^5.6.3"
+  }
+}
