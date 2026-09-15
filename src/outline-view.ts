@@ -219,8 +219,10 @@ export class OutlineFlowView extends ItemView {
       }
     });
 
-    // 画布式平移缩放
-    if (svg) this.panZoom = new PanZoomController(svg);
+    // 画布式平移缩放（按笔记路径缓存 viewBox，返回时恢复缩放/平移状态）
+    if (svg && this.activeFile) {
+      this.panZoom = new PanZoomController(svg, {}, `outline:${this.activeFile.path}`);
+    }
 
     if (svg && this.plugin.settings.dblclickFocus) {
       this.controller = new DiagramFocusController(svg, edges, {

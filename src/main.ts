@@ -19,6 +19,15 @@ import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
 const PLUGIN_ID = 'mermaid-link-nav';
 
+/** 简单字符串哈希，用于生成流程图缓存 key */
+function simpleHash(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return h.toString(36);
+}
+
 type ThemeMode = 'auto' | 'default' | 'dark' | 'forest' | 'neutral';
 type OpenMode = 'active' | 'tab' | 'split';
 
@@ -184,7 +193,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
       wrapper.innerHTML = result.svg;
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
-      this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId);
+      this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source);
     } catch (err) {
       wrapper.empty();
       wrapper.dataset.mlnState = 'error';
@@ -205,6 +214,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     edges: FlowEdge[],
     sourcePath: string,
     renderId: string,
+    diagramSource: string,
   ): void {
     const svg = wrapper.querySelector<SVGSVGElement>('svg');
     const nodeEls = Array.from(wrapper.querySelectorAll<SVGGElement>('g.node'));
@@ -225,7 +235,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
     });
 
     // 画布式平移缩放（滚轮缩放 / 拖动平移 / 触摸板手势）
-    if (svg) new PanZoomController(svg);
+    if (svg) {
+      const cacheKey = `${sourcePath}:${simpleHash(diagramSource)}`;
+      new PanZoomController(svg, {}, cacheKey);
+    }
 
     // 双击聚焦控制器
     let controller: DiagramFocusController | null = null;

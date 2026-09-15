@@ -28,10 +28,14 @@ interface Box {
   height: number;
 }
 
+/** 按 cacheKey 缓存每个流程图的 viewBox，跳转笔记返回后恢复缩放/平移状态 */
+const viewBoxCache = new Map<string, Box>();
+
 export class PanZoomController {
   private svg: SVGSVGElement;
   /** 事件绑定目标：优先用 svg 的父容器，避免干扰 svg 内部的 click 事件 */
   private readonly el: Element;
+  private readonly cacheKey?: string;
   private opts: Required<PanZoomOptions>;
   private current: Box;
   private readonly baseW: number;
@@ -44,6 +48,7 @@ export class PanZoomController {
   private lastX = 0;
   private lastY = 0;
   private panned = false;
+  private observer?: MutationObserver;
 
   private readonly handlers: Array<{
     type: string;
@@ -51,9 +56,10 @@ export class PanZoomController {
     options?: AddEventListenerOptions;
   }> = [];
 
-  constructor(svg: SVGSVGElement, opts: PanZoomOptions = {}) {
+  constructor(svg: SVGSVGElement, opts: PanZoomOptions = {}, cacheKey?: string) {
     this.svg = svg;
     this.el = svg.parentElement ?? svg;
+    this.cacheKey = cacheKey;
     this.opts = {
       minScale: opts.minScale ?? 0.15,
       maxScale: opts.maxScale ?? 6,
@@ -63,6 +69,18 @@ export class PanZoomController {
     this.baseW = this.current.width;
     this.baseH = this.current.height;
     this.ratio = this.baseW > 0 ? this.baseH / this.baseW : 1;
+    // 恢复之前的缩放/平移状态
+    if (cacheKey) {
+      const cached = viewBoxCache.get(cacheKey);
+      if (cached) this.writeBox(cached);
+      // 监听 viewBox 变化（包括聚焦动画），自动保存
+      this.observer = new MutationObserver(() => {
+        const b = this.readBox();
+        this.current = b;
+        viewBoxCache.set(cacheKey, { ...b });
+      });
+      this.observer.observe(svg, { attributes: true, attributeFilter: ['viewBox'] });
+    }
     this.bind();
   }
 
@@ -74,6 +92,7 @@ export class PanZoomController {
   private writeBox(b: Box): void {
     this.svg.setAttribute('viewBox', `${b.x} ${b.y} ${b.width} ${b.height}`);
     this.current = b;
+    if (this.cacheKey) viewBoxCache.set(this.cacheKey, { ...b });
   }
 
   /** 从 SVG 同步当前 viewBox（聚焦动画可能已修改它） */
@@ -207,6 +226,7 @@ export class PanZoomController {
   }
 
   dispose(): void {
+    this.observer?.disconnect();
     for (const h of this.handlers) {
       this.el.removeEventListener(h.type, h.listener, h.options);
     }
