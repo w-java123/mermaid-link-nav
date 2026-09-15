@@ -261,8 +261,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
       ev.preventDefault();
       const g = (ev.target as Element)?.closest('g.node') as SVGGElement | null;
       const menu = new Menu();
+      let hasItems = false;
 
       if (g) {
+        hasItems = true;
         const nodeId = extractNodeId(g, renderId);
         if (nodeId && knownIds.has(nodeId)) {
           const link = links.get(nodeId);
@@ -423,32 +425,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
             }),
           );
         }
-      } else {
-        menu.addItem((item) =>
-          item.setTitle('添加节点').onClick(() => {
-            const parsed = parseDiagram(diagramSource);
-            const nodeOptions = parsed.nodes.map((n) => ({
-              id: n.id,
-              label: extractNodeLabel(diagramSource, n),
-            }));
-            new NodeEditModal(this.app, {
-              title: '添加节点',
-              nodeOptions,
-              showConnectFrom: true,
-              onSubmit: async (result) => {
-                const { newSource } = addNode(diagramSource, {
-                  label: result.label,
-                  link: result.link || undefined,
-                  connectFrom: result.connectFrom,
-                });
-                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-                if (!ok) new Notice('添加节点失败');
-              },
-            }).open();
-          }),
-        );
       }
-      menu.showAtMouseEvent(ev);
+      if (hasItems) menu.showAtMouseEvent(ev);
     });
 
     // 双击聚焦控制器
