@@ -369,12 +369,21 @@ export default class MermaidLinkNavPlugin extends Plugin {
   }
 
   private paneTypeFromEvent(ev: MouseEvent): PaneType | boolean {
-    return this.paneTypeFromModifiers(ev.ctrlKey || ev.metaKey, ev.altKey);
+    if (ev.button === 1) return 'tab'; // 鼠标中键始终新标签页
+    if (ev.altKey) return 'split'; // Alt 始终分屏
+    // Ctrl/⌘+单击尊重设置中的默认打开方式（当前标签页/新标签页/分屏）
+    switch (this.settings.openMode) {
+      case 'tab':
+        return 'tab';
+      case 'split':
+        return 'split';
+      default:
+        return false; // 当前标签页
+    }
   }
 
-  /** Ctrl/Cmd 新标签页，Alt 分屏；否则使用设置中的默认方式 */
+  /** 键盘事件的打开方式：Alt 分屏，Ctrl/⌘ 按设置默认方式 */
   private paneTypeFromModifiers(primary: boolean, alt: boolean): PaneType | boolean {
-    if (primary) return 'tab';
     if (alt) return 'split';
     switch (this.settings.openMode) {
       case 'tab':

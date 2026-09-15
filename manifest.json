@@ -1,7 +1,7 @@
 {
   "id": "mermaid-link-nav",
   "name": "Mermaid Link Navigator",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "minAppVersion": "1.4.0",
   "description": "在 Mermaid 流程图节点中嵌入 [[笔记链接]]，Ctrl/⌘+单击跳转；支持画布式滚轮缩放与拖动平移；可指定新笔记默认文件夹；并可把当前笔记大纲自动生成为 Mermaid 流程图。",
   "author": "Custom",
