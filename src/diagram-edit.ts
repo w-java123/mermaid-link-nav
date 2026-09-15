@@ -97,6 +97,13 @@ export function changeNodeShape(source: string, nodeId: string, shapeType: NodeS
   return source.slice(0, node.start) + newDef + source.slice(node.end);
 }
 
+/** 在两个已存在节点之间添加连线（from --> to） */
+export function addEdge(source: string, from: string, to: string): string {
+  if (from === to) return source;
+  const edge = `\n${from} --> ${to}`;
+  return source.replace(/\s+$/, '') + edge + '\n';
+}
+
 /** 删除指定节点及其所有相关连线 */
 export function deleteNode(source: string, nodeId: string): string {
   const parsed = parseDiagram(source);

@@ -1,7 +1,7 @@
 /**
  * 节点编辑模态框：添加节点 / 编辑节点名称和跳转链接。
  */
-import { App, Modal, Setting } from 'obsidian';
+import { App, FuzzySuggestModal, Modal, Setting } from 'obsidian';
 
 export interface NodeEditResult {
   label: string;
@@ -109,5 +109,30 @@ export class NodeEditModal extends Modal {
 
   onClose(): void {
     this.contentEl.empty();
+  }
+}
+
+/** 从已存在节点中搜索选择一个，用于添加父子连线 */
+export class NodeSelectModal extends FuzzySuggestModal<NodeOption> {
+  private readonly onChoose: (id: string) => void;
+  private readonly items: NodeOption[];
+
+  constructor(app: App, items: NodeOption[], onChoose: (id: string) => void) {
+    super(app);
+    this.items = items;
+    this.onChoose = onChoose;
+    this.setPlaceholder('输入节点名称搜索…');
+  }
+
+  getItems(): NodeOption[] {
+    return this.items;
+  }
+
+  getItemText(item: NodeOption): string {
+    return item.label ? `${item.label}（${item.id}）` : item.id;
+  }
+
+  onChooseItem(item: NodeOption): void {
+    this.onChoose(item.id);
   }
 }

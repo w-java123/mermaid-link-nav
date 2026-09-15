@@ -16,8 +16,8 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
-import { addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, updateNoteSource } from './diagram-edit';
-import { NodeEditModal } from './edit-modal';
+import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, updateNoteSource } from './diagram-edit';
+import { NodeEditModal, NodeSelectModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
 const PLUGIN_ID = 'mermaid-link-nav';
@@ -267,46 +267,32 @@ export default class MermaidLinkNavPlugin extends Plugin {
         if (nodeId && knownIds.has(nodeId)) {
           const link = links.get(nodeId);
 
-          // 添加父节点（新节点作为当前节点的上游）
+          // 添加父节点（选择已存在节点，建立 选中 --> 当前 的连线）
           menu.addItem((item) =>
             item.setTitle('添加父节点').onClick(() => {
-              new NodeEditModal(this.app, {
-                title: '添加父节点',
-                showConnectFrom: false,
-                onSubmit: async (result) => {
-                  const { newSource } = addNode(diagramSource, {
-                    label: result.label,
-                    link: result.link || undefined,
-                    connectTo: nodeId,
-                  });
-                  const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-                  if (!ok) new Notice('添加父节点失败');
-                },
+              const parsed = parseDiagram(diagramSource);
+              const nodeOptions = parsed.nodes
+                .filter((n) => n.id !== nodeId)
+                .map((n) => ({ id: n.id, label: extractNodeLabel(diagramSource, n) }));
+              new NodeSelectModal(this.app, nodeOptions, async (selectedId) => {
+                const newSource = addEdge(diagramSource, selectedId, nodeId);
+                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                if (!ok) new Notice('添加父节点失败');
               }).open();
             }),
           );
 
-          // 添加子节点（默认以当前节点为上游）
+          // 添加子节点（选择已存在节点，建立 当前 --> 选中 的连线）
           menu.addItem((item) =>
             item.setTitle('添加子节点').onClick(() => {
               const parsed = parseDiagram(diagramSource);
-              const nodeOptions = parsed.nodes.map((n) => ({
-                id: n.id,
-                label: extractNodeLabel(diagramSource, n),
-              }));
-              new NodeEditModal(this.app, {
-                title: '添加子节点',
-                nodeOptions,
-                showConnectFrom: true,
-                onSubmit: async (result) => {
-                  const { newSource } = addNode(diagramSource, {
-                    label: result.label,
-                    link: result.link || undefined,
-                    connectFrom: result.connectFrom ?? nodeId,
-                  });
-                  const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-                  if (!ok) new Notice('添加子节点失败');
-                },
+              const nodeOptions = parsed.nodes
+                .filter((n) => n.id !== nodeId)
+                .map((n) => ({ id: n.id, label: extractNodeLabel(diagramSource, n) }));
+              new NodeSelectModal(this.app, nodeOptions, async (selectedId) => {
+                const newSource = addEdge(diagramSource, nodeId, selectedId);
+                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                if (!ok) new Notice('添加子节点失败');
               }).open();
             }),
           );
