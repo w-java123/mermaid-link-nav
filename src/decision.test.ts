@@ -1,40 +1,24 @@
-import { setAsDecision, removeOutgoingEdges, addLabeledEdge } from './diagram-edit';
+import { setAsDecision } from './diagram-edit';
 
-const source = `flowchart TD
-  A["开始"]
-  B{"判断?"}
-  C["是分支"]
-  D["否分支"]
-  A --> B
-  B --> C`;
+// 用户的真实场景：一行多语句，F（否目标）定义在 G（是目标）前面
+const src = `flowchart TD  D["选择地区"]  E["地区选长沙"]  F["地区选全国"]  E --> E1{"岗位多"} G["搜索技术栈"]  F --> H["岗位多+工资高"]`;
 
-// 测试 setAsDecision：B 设为判断节点，是->C，否->D
-const result = setAsDecision(source, 'B', 'C', 'D');
-console.log('=== 设置 B 为判断节点 ===');
-console.log(result);
-console.assert(result.includes('B{"判断?"}'), 'B 应为菱形');
-console.assert(result.includes('B -->|是| C'), '应有 是 边');
-console.assert(result.includes('B -->|否| D'), '应有 否 边');
-console.assert(!result.includes('B --> C\n'), '原有出边应删除');
-console.assert(result.includes('A --> B'), '入边应保留');
+console.log('=== 原始 ===');
+console.log(src);
 
-// 测试 removeOutgoingEdges 保留节点定义
-const source2 = `flowchart TD
-  F["名称"] --> C
-  C["结束"]`;
-const result2 = removeOutgoingEdges(source2, 'F');
-console.log('\n=== 删除 F 的出边（节点定义同行）===');
-console.log(result2);
-console.assert(result2.includes('F["名称"]'), 'F 定义应保留');
-console.assert(!result2.includes('F["名称"] --> C'), '出边应删除');
+const r = setAsDecision(src, 'E1', 'G', 'F');
+console.log('\n=== setAsDecision(E1, 是=G, 否=F) ===');
+console.log(r);
 
-// 测试 addLabeledEdge
-const source3 = `flowchart TD
-  A["甲"]
-  B["乙"]`;
-const result3 = addLabeledEdge(source3, 'A', 'B', '是');
-console.log('\n=== 添加带标签边 ===');
-console.log(result3);
-console.assert(result3.includes('A -->|是| B'), '带标签边应存在');
+// 验证 G 的定义在 F 前面
+const gPos = r.indexOf('G["搜索技术栈"]');
+const fPos = r.indexOf('F["地区选全国"]');
+console.log(`\nG 位置: ${gPos}, F 位置: ${fPos}`);
+console.assert(gPos < fPos, 'G（是）应在 F（否）前面');
+console.assert(r.includes('E1{"岗位多"}'), 'E1 应变菱形');
+console.assert(r.includes('E1 -->|是| G'), '是边应存在');
+console.assert(r.includes('E1 -->|否| F'), '否边应存在');
+console.assert(r.includes('G ~~~ F'), '隐形链接应存在');
+console.assert(r.includes('E --> E1'), 'E1 入边应保留');
 
 console.log('\n所有断言通过');

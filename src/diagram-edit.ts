@@ -206,7 +206,7 @@ export function addLabeledEdge(source: string, from: string, to: string, label: 
   return source.replace(/\s+$/, '') + edge + '\n';
 }
 
-/** 设置为判断节点：改菱形 + 删除原有出边 + 添加 是/否 两条带标签出边 + 隐形链接控制左右 */
+/** 设置为判断节点：改菱形 + 删除原有出边 + 是目标移到否目标左侧 + 添加是/否边 + 隐形链接 */
 export function setAsDecision(
   source: string,
   nodeId: string,
@@ -215,9 +215,30 @@ export function setAsDecision(
 ): string {
   let result = changeNodeShape(source, nodeId, 'diamond');
   result = removeOutgoingEdges(result, nodeId);
+
+  // 确保是目标定义在否目标前面（dagre 按定义顺序排左右，是在左否在右）
+  const parsed = parseDiagram(result);
+  const yesNode = parsed.nodes.find((n) => n.id === yesTarget);
+  const noNode = parsed.nodes.find((n) => n.id === noTarget);
+  if (yesNode && noNode && yesNode.start > noNode.start) {
+    // 是目标定义在否目标后面，需要前移
+    const beforeYes = result.slice(0, yesNode.start);
+    // 只有定义前没有入边时才移动，避免破坏连线
+    if (!/-->\s*$/.test(beforeYes)) {
+      const yesDef = result.slice(yesNode.start, yesNode.end);
+      result = result.slice(0, yesNode.start) + result.slice(yesNode.end);
+      // 重新定位否目标
+      const parsed2 = parseDiagram(result);
+      const noNode2 = parsed2.nodes.find((n) => n.id === noTarget);
+      if (noNode2) {
+        result = result.slice(0, noNode2.start) + yesDef + ' ' + result.slice(noNode2.start);
+      }
+    }
+  }
+
   result = addLabeledEdge(result, nodeId, yesTarget, '是');
   result = addLabeledEdge(result, nodeId, noTarget, '否');
-  // 隐形链接：强制是/否目标同一层级，是在左、否在右
+  // 隐形链接：强制是/否目标同一层级
   if (yesTarget !== noTarget) {
     result = result.replace(/\s+$/, '') + `\n${yesTarget} ~~~ ${noTarget}\n`;
   }
