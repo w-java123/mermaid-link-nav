@@ -16,7 +16,7 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
-import { addNode, deleteNode, editNode, updateNoteSource } from './diagram-edit';
+import { addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, updateNoteSource } from './diagram-edit';
 import { NodeEditModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
@@ -266,6 +266,33 @@ export default class MermaidLinkNavPlugin extends Plugin {
         const nodeId = extractNodeId(g, renderId);
         if (nodeId && knownIds.has(nodeId)) {
           const link = links.get(nodeId);
+
+          // 添加子节点（默认以当前节点为上游）
+          menu.addItem((item) =>
+            item.setTitle('添加子节点').onClick(() => {
+              const parsed = parseDiagram(diagramSource);
+              const nodeOptions = parsed.nodes.map((n) => ({
+                id: n.id,
+                label: extractNodeLabel(diagramSource, n),
+              }));
+              new NodeEditModal(this.app, {
+                title: '添加子节点',
+                nodeOptions,
+                showConnectFrom: true,
+                onSubmit: async (result) => {
+                  const { newSource } = addNode(diagramSource, {
+                    label: result.label,
+                    link: result.link || undefined,
+                    connectFrom: result.connectFrom ?? nodeId,
+                  });
+                  const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                  if (!ok) new Notice('添加子节点失败');
+                },
+              }).open();
+            }),
+          );
+
+          // 编辑节点
           menu.addItem((item) =>
             item.setTitle('编辑节点').onClick(() => {
               const currentLabel = link?.displayText ?? (g.textContent ?? '').trim();
@@ -285,6 +312,25 @@ export default class MermaidLinkNavPlugin extends Plugin {
               }).open();
             }),
           );
+
+          // 改变形状
+          menu.addItem((item) =>
+            item.setTitle('改变形状').onClick((ev) => {
+              const shapeMenu = new Menu();
+              NODE_SHAPES.forEach((shape) => {
+                shapeMenu.addItem((sub) =>
+                  sub.setTitle(shape.label).onClick(async () => {
+                    const newSource = changeNodeShape(diagramSource, nodeId, shape.type);
+                    const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                    if (!ok) new Notice('改变形状失败');
+                  }),
+                );
+              });
+              shapeMenu.showAtMouseEvent(ev as MouseEvent);
+            }),
+          );
+
+          // 删除节点
           menu.addItem((item) =>
             item.setTitle('删除节点').onClick(async () => {
               const newSource = deleteNode(diagramSource, nodeId);

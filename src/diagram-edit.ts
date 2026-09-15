@@ -1,9 +1,22 @@
 /**
- * Mermaid 流程图源码编辑：添加节点、编辑节点名称/链接、删除节点。
+ * Mermaid 流程图源码编辑：添加节点、编辑节点名称/链接、删除节点、改变形状。
  * 所有操作基于原始源码（含 [[wikilink]]），返回新源码。
  */
 import type { App } from 'obsidian';
 import { parseDiagram } from './parser';
+
+/** 支持的节点形状 */
+export const NODE_SHAPES = [
+  { type: 'rect', label: '矩形', opener: '[', closer: ']' },
+  { type: 'round', label: '圆角矩形', opener: '(', closer: ')' },
+  { type: 'circle', label: '圆形', opener: '((', closer: '))' },
+  { type: 'diamond', label: '菱形', opener: '{', closer: '}' },
+  { type: 'hexagon', label: '六边形', opener: '{{', closer: '}}' },
+  { type: 'cylinder', label: '圆柱形', opener: '[(', closer: ')]' },
+  { type: 'subroutine', label: '子程序（双边框）', opener: '[[', closer: ']]' },
+] as const;
+
+export type NodeShapeType = (typeof NODE_SHAPES)[number]['type'];
 
 export interface AddNodeOptions {
   label: string;
@@ -61,6 +74,22 @@ export function editNode(source: string, nodeId: string, opts: EditNodeOptions):
   const before = source.slice(0, node.labelStart);
   const after = source.slice(node.labelEnd);
   return before + label + after;
+}
+
+/** 改变节点形状，保留标签内容 */
+export function changeNodeShape(source: string, nodeId: string, shapeType: NodeShapeType): string {
+  const parsed = parseDiagram(source);
+  const node = parsed.nodes.find((n) => n.id === nodeId);
+  if (!node) return source;
+  const shape = NODE_SHAPES.find((s) => s.type === shapeType);
+  if (!shape) return source;
+
+  const idAndOpener = source.slice(node.start, node.labelStart);
+  const label = source.slice(node.labelStart, node.labelEnd);
+  // 去掉原 opener（含前导空白），拼接新 opener + 标签 + 新 closer
+  const cleaned = idAndOpener.replace(/\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])\s*$/, '');
+  const newDef = `${cleaned}${shape.opener}${label}${shape.closer}`;
+  return source.slice(0, node.start) + newDef + source.slice(node.end);
 }
 
 /** 删除指定节点及其所有相关连线 */
