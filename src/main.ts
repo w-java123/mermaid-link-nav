@@ -7,6 +7,7 @@ import {
   Plugin,
   PluginSettingTab,
   Setting,
+  TFolder,
 } from 'obsidian';
 import mermaid from 'mermaid';
 import { DiagramFocusController } from './focus-dom';
@@ -43,6 +44,8 @@ interface MermaidLinkNavSettings {
   zoomDuration: number;
   /** 聚焦留白比例 */
   zoomPaddingRatio: number;
+  /** 点击不存在的链接时，自动创建笔记的目标文件夹（留空=Obsidian 默认位置） */
+  newNoteFolder: string;
 }
 
 const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
@@ -57,6 +60,7 @@ const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
   clickDelayMs: 220,
   zoomDuration: 320,
   zoomPaddingRatio: 0.15,
+  newNoteFolder: '',
 };
 
 let renderSeq = 0;
@@ -254,10 +258,22 @@ export default class MermaidLinkNavPlugin extends Plugin {
           g.appendChild(title);
         }
 
-        const open = (ev: MouseEvent): void => {
+        const open = async (ev: MouseEvent): Promise<void> => {
           ev.preventDefault();
           ev.stopPropagation();
-          void this.app.workspace.openLinkText(
+          // 链接不存在且设置了目标文件夹、且链接本身未指定路径时，自动在该文件夹创建
+          const targetPath = link.target.split('#')[0];
+          const exists = this.app.metadataCache.getFirstLinkpathDest(targetPath, sourcePath);
+          if (!exists && this.settings.newNoteFolder && !targetPath.includes('/')) {
+            const folder = this.app.vault.getAbstractFileByPath(this.settings.newNoteFolder);
+            if (folder instanceof TFolder) {
+              const newPath = this.settings.newNoteFolder + '/' + targetPath + '.md';
+              if (!this.app.vault.getAbstractFileByPath(newPath)) {
+                await this.app.vault.create(newPath, '');
+              }
+            }
+          }
+          await this.app.workspace.openLinkText(
             link.target,
             sourcePath,
             this.paneTypeFromEvent(ev),
@@ -268,10 +284,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
         g.addEventListener('click', (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          if (ev.ctrlKey || ev.metaKey || ev.altKey) open(ev);
+          if (ev.ctrlKey || ev.metaKey || ev.altKey) void open(ev);
         });
         g.addEventListener('auxclick', (ev) => {
-          if (ev.button === 1) open(ev); // 鼠标中键：新标签页
+          if (ev.button === 1) void open(ev); // 鼠标中键：新标签页
         });
         g.addEventListener('keydown', (ev) => {
           if (ev.key === 'Enter' || ev.key === ' ') {
@@ -460,6 +476,21 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
           .setDynamicTooltip()
           .onChange(async (v) => {
             this.plugin.settings.zoomPaddingRatio = v;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl).setName('笔记创建').setHeading();
+
+    new Setting(containerEl)
+      .setName('新笔记默认文件夹')
+      .setDesc('点击流程图中不存在的链接时，自动在此文件夹下创建笔记。留空则使用 Obsidian 默认位置；若链接本身已含路径（如 folder/note）则尊重链接路径。')
+      .addText((text) =>
+        text
+          .setPlaceholder('例如：Inbox 或 学习笔记/草稿')
+          .setValue(this.plugin.settings.newNoteFolder)
+          .onChange(async (v) => {
+            this.plugin.settings.newNoteFolder = v.trim().replace(/^\/+|\/+$/g, '');
             await this.plugin.saveSettings();
           }),
       );
