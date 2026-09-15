@@ -80,31 +80,12 @@ async function main(): Promise<void> {
   assert.deepStrictEqual(visible, ['n0', 'n1', 'n2', 'n3']);
   ctl.restore();
   assert.strictEqual(ctl.currentFocus, null);
+  // restore 后所有节点恢复可见
+  const afterRestore = nodes.filter((g) => g.style.display !== 'none').map((g) => extractNodeId(g, 'os1'));
+  assert.deepStrictEqual(afterRestore, ['n0', 'n1', 'n2', 'n3', 'n4'], 'restore 后全图恢复');
   ctl.dispose();
 
-  // ---- 钻取模式：初始收起（只显示根 + 第一层），双击展开子节点，再双击收起 ----
-  const drill = new DiagramFocusController(svgEl, diagram.edges, {
-    renderId: 'os1',
-    knownIds: new Set(ids as string[]),
-    includeAncestors: true,
-    duration: 0,
-    paddingRatio: 0.15,
-    initialMaxDepth: 1,
-  });
-  const visibleIds = (): string[] =>
-    nodes.filter((g) => g.style.display !== 'none').map((g) => extractNodeId(g, 'os1')) as string[];
-  assert.deepStrictEqual(visibleIds(), ['n0', 'n1'], '初始只显示根与第一层');
-  drill.toggle('n1'); // 放大：展开 n1 的全部子节点
-  assert.deepStrictEqual(visibleIds(), ['n0', 'n1', 'n2', 'n3', 'n4'], '放大时展开整棵子树');
-  drill.toggle('n1'); // 缩小：收起回第一层
-  assert.deepStrictEqual(visibleIds(), ['n0', 'n1'], '缩小时收起子节点');
-  drill.showAll();
-  assert.strictEqual(visibleIds().length, 5, 'showAll 展开全部');
-  drill.restore();
-  assert.deepStrictEqual(visibleIds(), ['n0', 'n1'], 'restore 回到折叠态');
-  drill.dispose();
-
-  console.log('\n大纲流程图端到端验证通过：生成代码可渲染、节点/边齐全、wikilink 替换、聚焦/钻取正常');
+  console.log('\n大纲流程图端到端验证通过：生成代码可渲染、节点/边齐全、wikilink 替换、双击聚焦/返回全图正常');
 }
 
 main().catch((e) => {

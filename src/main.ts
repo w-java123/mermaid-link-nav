@@ -201,15 +201,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
         includeAncestors: this.settings.includeAncestors,
         duration: this.settings.zoomDuration,
         paddingRatio: this.settings.zoomPaddingRatio,
-        // 钻取模式：初始只显示根 + 第一层，双击展开子节点并放大，再双击收起
-        initialMaxDepth: 1,
         onFocusChange: (focused) => {
           if (resetBtn) resetBtn.style.display = focused ? '' : 'none';
           wrapper.classList.toggle('mln-focused', focused);
         },
       });
 
-      resetBtn = wrapper.createDiv({ cls: 'mln-reset-btn', text: '↩ 收起子树' });
+      resetBtn = wrapper.createDiv({ cls: 'mln-reset-btn', text: '↩ 返回全图' });
       resetBtn.style.display = 'none';
       resetBtn.addEventListener('click', () => controller?.restore());
 
@@ -247,7 +245,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
           const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
           title.textContent =
             (exists ? `Ctrl/⌘+单击跳转到：${link.target}` : `Ctrl/⌘+单击跳转到：${link.target}（笔记不存在，将自动创建）`) +
-            (this.settings.dblclickFocus ? '\n双击：展开子节点并放大，再双击收起' : '');
+            (this.settings.dblclickFocus ? '\n双击：聚焦此分支，再双击返回全图' : '');
           g.appendChild(title);
         }
 
@@ -282,7 +280,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
         });
       } else if (nodeId && this.settings.dblclickFocus && this.settings.showTooltip) {
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-        title.textContent = '双击：展开子节点并放大，再双击收起';
+        title.textContent = '双击：聚焦此分支，再双击返回全图';
         g.appendChild(title);
       }
 

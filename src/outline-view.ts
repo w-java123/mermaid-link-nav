@@ -24,9 +24,6 @@ export class OutlineFlowView extends ItemView {
   private stage!: HTMLDivElement;
   private dirBtn!: HTMLButtonElement;
   private resetBtn!: HTMLButtonElement;
-  private expandBtn!: HTMLButtonElement;
-  /** 当前是否处于「全部展开」态（钻取模式下可一键收起回第一层） */
-  private allExpanded = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: MermaidLinkNavPlugin) {
     super(leaf);
@@ -65,26 +62,12 @@ export class OutlineFlowView extends ItemView {
     });
     this.resetBtn.style.display = 'none';
     this.resetBtn.addEventListener('click', () => this.controller?.restore());
-    this.expandBtn = this.toolbar.createEl('button', {
-      cls: 'mln-outline-btn',
-      text: '展开全部',
-    });
-    this.expandBtn.addEventListener('click', () => {
-      if (!this.controller) return;
-      if (this.allExpanded) {
-        this.controller.restore();
-      } else {
-        this.controller.showAll();
-      }
-      this.allExpanded = !this.allExpanded;
-      this.expandBtn.textContent = this.allExpanded ? '收起子树' : '展开全部';
-    });
     this.toolbar.createEl('button', { cls: 'mln-outline-btn', text: '刷新' }).addEventListener('click', () => {
       void this.render();
     });
     this.toolbar.createSpan({
       cls: 'mln-outline-hint',
-      text: 'Ctrl/⌘+单击查看详情 · 双击展开子节点并放大（再双击收起） · 右键更多',
+      text: 'Ctrl/⌘+单击查看详情 · 双击聚焦放大（再双击返回全图） · 右键更多',
     });
 
     this.stage = this.contentEl.createDiv({ cls: 'mln-outline-stage' });
@@ -143,11 +126,6 @@ export class OutlineFlowView extends ItemView {
     this.controller?.dispose();
     this.controller = null;
     this.resetBtn.style.display = 'none';
-    this.allExpanded = false;
-    if (this.expandBtn) {
-      this.expandBtn.textContent = '展开全部';
-      this.expandBtn.style.display = this.plugin.settings.dblclickFocus ? '' : 'none';
-    }
     this.stage.empty();
 
     const file = this.activeFile;
@@ -244,14 +222,8 @@ export class OutlineFlowView extends ItemView {
         includeAncestors: this.plugin.settings.includeAncestors,
         duration: this.plugin.settings.zoomDuration,
         paddingRatio: this.plugin.settings.zoomPaddingRatio,
-        // 钻取模式：初始只显示根 + 第一层，双击展开子节点并放大
-        initialMaxDepth: 1,
         onFocusChange: (focused) => {
           this.resetBtn.style.display = focused ? '' : 'none';
-          if (!focused) {
-            this.allExpanded = false;
-            this.expandBtn.textContent = '展开全部';
-          }
         },
       });
       svg.addEventListener('dblclick', (ev) => {
@@ -274,7 +246,7 @@ export class OutlineFlowView extends ItemView {
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
         title.textContent =
           `Ctrl/⌘+单击查看详情（定位到第 ${line + 1} 行）` +
-          (s.dblclickFocus ? '\n双击：展开子节点并放大，再双击收起' : '');
+          (s.dblclickFocus ? '\n双击：聚焦此分支，再双击返回全图' : '');
         g.appendChild(title);
       }
 

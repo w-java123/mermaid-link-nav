@@ -27,12 +27,6 @@ export interface FocusDomOptions {
   includeAncestors: boolean;
   duration: number;
   paddingRatio: number;
-  /**
-   * 钻取模式：初始只显示从根起 0..initialMaxDepth 层（更深的子节点收起），
-   * 双击节点展开其整棵子树并放大，restore 时再收回到该折叠层级。
-   * 不传则保持「全图显示、双击仅裁剪聚焦」的旧行为。
-   */
-  initialMaxDepth?: number;
   onFocusChange?: (focused: boolean, focusId: string | null) => void;
 }
 
@@ -70,8 +64,6 @@ export class DiagramFocusController {
   private initialView: Box;
   private raf = 0;
   private focusRoot: SVGGElement | null = null;
-  private depthOf = new Map<string, number>();
-  private readonly drillMode: boolean;
   currentFocus: string | null = null;
 
   constructor(svg: SVGSVGElement, edges: FlowEdge[], opts: FocusDomOptions) {
@@ -80,63 +72,7 @@ export class DiagramFocusController {
     this.opts = opts;
     this.graph = buildGraph(edges);
     this.index();
-    this.drillMode = typeof opts.initialMaxDepth === 'number';
-    this.computeDepths();
-    if (this.drillMode) {
-      // 构造时所有节点都还可见，bbox 可准确测量；先量折叠视图，再隐藏深层节点
-      const visible = this.collapsedSet(opts.initialMaxDepth!);
-      this.initialView = this.viewBoxFor(visible);
-      this.setVisibility(visible);
-      this.setViewBox(this.initialView);
-    } else {
-      this.initialView = this.readViewBox();
-    }
-  }
-
-  get isDrillMode(): boolean {
-    return this.drillMode;
-  }
-
-  /** 从无根入度的起点 BFS，求每个节点相对根的最大层级深度 */
-  private computeDepths(): void {
-    const roots = [...this.nodeMap.keys()].filter(
-      (id) => (this.graph.incoming.get(id)?.length ?? 0) === 0,
-    );
-    roots.forEach((r) => this.depthOf.set(r, 0));
-    const queue = [...roots];
-    while (queue.length) {
-      const u = queue.shift()!;
-      const du = this.depthOf.get(u) ?? 0;
-      for (const v of this.graph.outgoing.get(u) ?? []) {
-        const next = du + 1;
-        if (!this.depthOf.has(v) || next > (this.depthOf.get(v) ?? 0)) {
-          this.depthOf.set(v, next);
-          queue.push(v);
-        }
-      }
-    }
-  }
-
-  /** 钻取模式下折叠态应可见的节点（深度 <= max，孤立节点保留） */
-  private collapsedSet(maxDepth: number): Set<string> {
-    const set = new Set<string>();
-    this.nodeMap.forEach((_g, id) => {
-      const d = this.depthOf.get(id);
-      if (d === undefined || d <= maxDepth) set.add(id);
-    });
-    return set;
-  }
-
-  /** 按节点集合设置节点/边的显隐（边的两端都可见才显示） */
-  private setVisibility(visible: Set<string>): void {
-    this.nodeMap.forEach((g, id) => {
-      g.style.display = visible.has(id) ? '' : 'none';
-    });
-    this.edgeDoms.forEach((e) => {
-      const show = visible.has(e.from) && visible.has(e.to);
-      e.path.style.display = show ? '' : 'none';
-      if (e.label) e.label.style.display = show ? '' : 'none';
-    });
+    this.initialView = this.readViewBox();
   }
 
   /** 临时全部显示后测量目标集合的 viewBox（display:none 的节点测不到 bbox） */
@@ -304,38 +240,18 @@ export class DiagramFocusController {
     this.opts.onFocusChange?.(true, id);
   }
 
-  /** 展开全部节点并缩放到完整全图 */
-  showAll(): void {
-    this.focusRoot?.classList.remove('mln-focus-root');
-    this.focusRoot = null;
-    this.currentFocus = null;
-    const all = new Set(this.nodeMap.keys());
-    const target = this.viewBoxFor(all);
-    this.setVisibility(all);
-    this.animate(target);
-    this.opts.onFocusChange?.(false, null);
-  }
-
   restore(): void {
     this.focusRoot?.classList.remove('mln-focus-root');
     this.focusRoot = null;
     this.currentFocus = null;
-    if (this.drillMode) {
-      // 钻取模式：收回到初始折叠层级
-      const visible = this.collapsedSet(this.opts.initialMaxDepth!);
-      const target = this.viewBoxFor(visible);
-      this.setVisibility(visible);
-      this.animate(target);
-    } else {
-      this.nodeMap.forEach((g) => {
-        g.style.display = '';
-      });
-      this.edgeDoms.forEach((e) => {
-        e.path.style.display = '';
-        e.label && (e.label.style.display = '');
-      });
-      this.animate(this.initialView);
-    }
+    this.nodeMap.forEach((g) => {
+      g.style.display = '';
+    });
+    this.edgeDoms.forEach((e) => {
+      e.path.style.display = '';
+      e.label && (e.label.style.display = '');
+    });
+    this.animate(this.initialView);
     this.opts.onFocusChange?.(false, null);
   }
 
