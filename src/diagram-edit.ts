@@ -201,6 +201,13 @@ export function setAsDecision(
   return result;
 }
 
+/** 移出父子节点：删除该节点所有入边和出边，使其成为孤立节点 */
+export function disconnectNode(source: string, nodeId: string): string {
+  let result = removeIncomingEdges(source, nodeId);
+  result = removeOutgoingEdges(result, nodeId);
+  return result;
+}
+
 /** 替换节点的父节点：删除原有入边，建立 parentId --> nodeId */
 export function setParent(source: string, nodeId: string, parentId: string): string {
   if (nodeId === parentId) return source;

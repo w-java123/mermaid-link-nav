@@ -16,7 +16,7 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
-import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, setAsDecision, setParent, updateNoteSource } from './diagram-edit';
+import { addEdge, addNode, changeNodeShape, deleteNode, disconnectNode, editNode, NODE_SHAPES, setAsDecision, setParent, updateNoteSource } from './diagram-edit';
 import { NodeEditModal, NodeSelectModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
@@ -324,12 +324,29 @@ export default class MermaidLinkNavPlugin extends Plugin {
               if (!svg) return;
               let phase: 'yes' | 'no' = 'yes';
               let yesTarget: string | null = null;
-              const notice = new Notice('请点击选择为【是】时的子节点（Esc 取消）', 0);
+
+              // 浮动提示：定位在当前节点上方
+              const hint = document.createElement('div');
+              hint.style.cssText = [
+                'position:fixed', 'z-index:1000', 'pointer-events:none',
+                'background:var(--background-primary)', 'border:1px solid var(--background-modifier-border)',
+                'border-radius:6px', 'padding:8px 14px', 'font-size:14px',
+                'box-shadow:0 2px 10px rgba(0,0,0,0.2)', 'white-space:nowrap',
+                'transform:translate(-50%,-100%)',
+              ].join(';');
+              const setHint = (text: string, redWord: string) => {
+                hint.innerHTML = text.replace(redWord, `<span style="color:var(--text-error);font-weight:700;font-size:16px">${redWord}</span>`);
+                const rect = g.getBoundingClientRect();
+                hint.style.left = `${rect.left + rect.width / 2}px`;
+                hint.style.top = `${rect.top - 8}px`;
+              };
+              setHint('请点击选择为【是】时的子节点（Esc 取消）', '【是】');
+              document.body.appendChild(hint);
 
               const cleanup = () => {
                 svg.removeEventListener('click', onClick, true);
                 document.removeEventListener('keydown', onKey);
-                notice.hide();
+                hint.remove();
               };
 
               const onKey = (ev: KeyboardEvent) => {
@@ -337,16 +354,16 @@ export default class MermaidLinkNavPlugin extends Plugin {
               };
 
               const onClick = (ev: MouseEvent) => {
-                const g = (ev.target as Element)?.closest('g.node') as SVGGElement | null;
-                if (!g) return;
-                const targetId = extractNodeId(g, renderId);
+                const targetG = (ev.target as Element)?.closest('g.node') as SVGGElement | null;
+                if (!targetG) return;
+                const targetId = extractNodeId(targetG, renderId);
                 if (!targetId || targetId === nodeId || !knownIds.has(targetId)) return;
                 ev.stopPropagation();
 
                 if (phase === 'yes') {
                   yesTarget = targetId;
                   phase = 'no';
-                  notice.setMessage('请点击选择为【否】时的子节点（Esc 取消）');
+                  setHint('请点击选择为【否】时的子节点（Esc 取消）', '【否】');
                 } else {
                   const noTarget = targetId;
                   cleanup();
@@ -359,6 +376,15 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
               svg.addEventListener('click', onClick, true);
               document.addEventListener('keydown', onKey);
+            }),
+          );
+
+          // 移出父子节点（删除所有入边和出边）
+          menu.addItem((item) =>
+            item.setTitle('移出父子节点').onClick(async () => {
+              const newSource = disconnectNode(diagramSource, nodeId);
+              const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+              if (!ok) new Notice('移出父子节点失败');
             }),
           );
 
