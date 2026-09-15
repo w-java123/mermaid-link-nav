@@ -332,8 +332,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
                   const newSource = setAsDecision(diagramSource, nodeId, yesId, noId);
                   const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
                   if (!ok) new Notice('设置判断节点失败');
-                }).open();
-              }).open();
+                }, '选择「否」的目标节点').open();
+              }, '选择「是」的目标节点').open();
             }),
           );
 

@@ -117,11 +117,12 @@ export class NodeSelectModal extends FuzzySuggestModal<NodeOption> {
   private readonly onChoose: (id: string) => void;
   private readonly items: NodeOption[];
 
-  constructor(app: App, items: NodeOption[], onChoose: (id: string) => void) {
+  constructor(app: App, items: NodeOption[], onChoose: (id: string) => void, title?: string) {
     super(app);
     this.items = items;
     this.onChoose = onChoose;
     this.setPlaceholder('输入节点名称搜索…');
+    if (title) this.setTitle(title);
   }
 
   getItems(): NodeOption[] {
