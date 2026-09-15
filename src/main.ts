@@ -16,7 +16,7 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
-import { addEdge, addNode, changeNodeShape, deleteNode, disconnectNode, editNode, NODE_SHAPES, setAsDecision, setParent, updateNoteSource } from './diagram-edit';
+import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, updateNoteSource } from './diagram-edit';
 import { NodeEditModal, NodeSelectModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
@@ -379,12 +379,21 @@ export default class MermaidLinkNavPlugin extends Plugin {
             }),
           );
 
-          // 移出父子节点（删除所有入边和出边）
+          // 移出父节点（删除所有入边）
           menu.addItem((item) =>
-            item.setTitle('移出父子节点').onClick(async () => {
-              const newSource = disconnectNode(diagramSource, nodeId);
+            item.setTitle('移出父节点').onClick(async () => {
+              const newSource = removeIncomingEdges(diagramSource, nodeId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-              if (!ok) new Notice('移出父子节点失败');
+              if (!ok) new Notice('移出父节点失败');
+            }),
+          );
+
+          // 移出子节点（删除所有出边）
+          menu.addItem((item) =>
+            item.setTitle('移出子节点').onClick(async () => {
+              const newSource = removeOutgoingEdges(diagramSource, nodeId);
+              const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+              if (!ok) new Notice('移出子节点失败');
             }),
           );
 
