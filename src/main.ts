@@ -7,6 +7,7 @@ import {
   Plugin,
   PluginSettingTab,
   Setting,
+  TFile,
   TFolder,
 } from 'obsidian';
 import mermaid from 'mermaid';
@@ -75,6 +76,33 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     // 笔记大纲 -> Mermaid 流程图视图
     this.registerView(OUTLINE_VIEW_TYPE, (leaf) => new OutlineFlowView(leaf, this));
+
+    // 全局监听：新文件创建后，自动把匹配的虚线节点更新为实线
+    this.registerEvent(
+      this.app.vault.on('create', (file) => {
+        if (!(file instanceof TFile)) return;
+        const nodes = document.querySelectorAll<SVGGElement>(
+          '.mermaid-link-node.is-unresolved[data-link]',
+        );
+        nodes.forEach((g) => {
+          const link = g.dataset.link || '';
+          const targetPath = link.split('#')[0];
+          if (!targetPath) return;
+          if (this.app.metadataCache.getFirstLinkpathDest(targetPath, '')) {
+            g.classList.remove('is-unresolved');
+            const oldTitle = g.querySelector('title');
+            if (oldTitle) oldTitle.remove();
+            if (this.settings.showTooltip) {
+              const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+              title.textContent =
+                `Ctrl/⌘+单击跳转到：${link}` +
+                (this.settings.dblclickFocus ? '\n双击：聚焦此分支，再双击返回全图' : '');
+              g.appendChild(title);
+            }
+          }
+        });
+      }),
+    );
 
     this.addCommand({
       id: 'open-outline-flowchart',
@@ -249,6 +277,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
         g.setAttribute('tabindex', '0');
         g.setAttribute('role', 'link');
         g.setAttribute('aria-label', `跳转到 ${link.target}`);
+        g.dataset.link = link.target;
 
         if (this.settings.showTooltip) {
           const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -263,14 +292,27 @@ export default class MermaidLinkNavPlugin extends Plugin {
           ev.stopPropagation();
           // 链接不存在且设置了目标文件夹、且链接本身未指定路径时，自动在该文件夹创建
           const targetPath = link.target.split('#')[0];
-          const exists = this.app.metadataCache.getFirstLinkpathDest(targetPath, sourcePath);
-          if (!exists && this.settings.newNoteFolder && !targetPath.includes('/')) {
+          const existed = !!this.app.metadataCache.getFirstLinkpathDest(targetPath, sourcePath);
+          if (!existed && this.settings.newNoteFolder && !targetPath.includes('/')) {
             const folder = this.app.vault.getAbstractFileByPath(this.settings.newNoteFolder);
             if (folder instanceof TFolder) {
               const newPath = this.settings.newNoteFolder + '/' + targetPath + '.md';
               if (!this.app.vault.getAbstractFileByPath(newPath)) {
                 await this.app.vault.create(newPath, '');
               }
+            }
+          }
+          // 点击后笔记已被创建（无论是我们创建的还是 openLinkText 创建的），更新节点样式为实线
+          if (!existed) {
+            g.classList.remove('is-unresolved');
+            if (this.settings.showTooltip) {
+              const oldTitle = g.querySelector('title');
+              if (oldTitle) oldTitle.remove();
+              const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+              title.textContent =
+                `Ctrl/⌘+单击跳转到：${link.target}` +
+                (this.settings.dblclickFocus ? '\n双击：聚焦此分支，再双击返回全图' : '');
+              g.appendChild(title);
             }
           }
           await this.app.workspace.openLinkText(
