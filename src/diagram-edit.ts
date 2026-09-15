@@ -104,12 +104,14 @@ export function addEdge(source: string, from: string, to: string): string {
   return source.replace(/\s+$/, '') + edge + '\n';
 }
 
-/** 删除节点的所有入边（X --> nodeId），链式边自动跳过中间节点 */
+/** 删除节点的所有入边（X --> nodeId），保留节点定义，链式边自动跳过中间节点 */
 export function removeIncomingEdges(source: string, nodeId: string): string {
   const lines = source.split('\n');
   const result: string[] = [];
   const inEdgeRe = new RegExp(`-->\\s*${nodeId}(\\s|$|[^\\w-])`);
   const outEdgeRe = new RegExp(`${nodeId}\\s*-->`);
+  // 行内是否包含节点定义（ID[、ID(、ID{ 等形状括号）
+  const nodeDefRe = /[A-Za-z_][\w-]*\s*(\[\[|\[\(|\(\(|\{\{|\[\/|\[\\|[\[\(\{>])/;
 
   for (const line of lines) {
     if (/^\s*(%%|graph|flowchart|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
@@ -117,12 +119,21 @@ export function removeIncomingEdges(source: string, nodeId: string): string {
       continue;
     }
     if (inEdgeRe.test(line)) {
-      if (outEdgeRe.test(line)) {
+      if (nodeDefRe.test(line)) {
+        // 行内含节点定义：F["名称"] --> nodeId 或 F["名称"] --> nodeId --> C
+        // 只删掉入边段，保留节点定义和后续出边
+        let modified = line.replace(
+          new RegExp(`-->\\s*${nodeId}(\\s*-->)?`, 'g'),
+          (_m, hasOut: string) => (hasOut ? '-->' : ''),
+        );
+        modified = modified.replace(/\s*-->\s*$/, '').trimEnd();
+        if (modified.trim()) result.push(modified);
+      } else if (outEdgeRe.test(line)) {
         // 链式边 A --> nodeId --> C，改成 A --> C
         const modified = line.replace(new RegExp(`-->\\s*${nodeId}\\s*-->`, 'g'), '-->');
         result.push(modified);
       }
-      // 简单入边 A --> nodeId，整行删除
+      // 纯入边行 A --> nodeId，整行删除
     } else {
       result.push(line);
     }
