@@ -266,7 +266,6 @@ export class OutlineFlowView extends ItemView {
       };
 
       g.addEventListener('click', (ev) => {
-        if (svg?.dataset.mlnPan === '1') return; // 拖动结束后的误触发
         ev.preventDefault();
         ev.stopPropagation();
         const mode = detailPane(ev);

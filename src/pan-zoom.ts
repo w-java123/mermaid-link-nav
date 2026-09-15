@@ -30,6 +30,8 @@ interface Box {
 
 export class PanZoomController {
   private svg: SVGSVGElement;
+  /** 事件绑定目标：优先用 svg 的父容器，避免干扰 svg 内部的 click 事件 */
+  private readonly el: Element;
   private opts: Required<PanZoomOptions>;
   private current: Box;
   private readonly baseW: number;
@@ -51,6 +53,7 @@ export class PanZoomController {
 
   constructor(svg: SVGSVGElement, opts: PanZoomOptions = {}) {
     this.svg = svg;
+    this.el = svg.parentElement ?? svg;
     this.opts = {
       minScale: opts.minScale ?? 0.15,
       maxScale: opts.maxScale ?? 6,
@@ -199,16 +202,15 @@ export class PanZoomController {
     listener: EventListenerOrEventListenerObject,
     options?: AddEventListenerOptions,
   ): void {
-    this.svg.addEventListener(type, listener, options);
+    this.el.addEventListener(type, listener, options);
     this.handlers.push({ type, listener, options });
   }
 
   dispose(): void {
     for (const h of this.handlers) {
-      this.svg.removeEventListener(h.type, h.listener, h.options);
+      this.el.removeEventListener(h.type, h.listener, h.options);
     }
     this.svg.classList.remove('mln-panning');
-    this.svg.style.cursor = '';
     delete this.svg.dataset.mlnPan;
   }
 }

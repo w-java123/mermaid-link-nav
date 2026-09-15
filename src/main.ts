@@ -266,7 +266,6 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
         // 仅 Ctrl/⌘（或 Alt）+ 单击才跳转查看详情，普通左键单击不跳转
         g.addEventListener('click', (ev) => {
-          if (svg?.dataset.mlnPan === '1') return; // 拖动结束后的误触发
           ev.preventDefault();
           ev.stopPropagation();
           if (ev.ctrlKey || ev.metaKey || ev.altKey) open(ev);
