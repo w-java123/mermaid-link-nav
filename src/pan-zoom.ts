@@ -54,7 +54,7 @@ export class PanZoomController {
     this.opts = {
       minScale: opts.minScale ?? 0.15,
       maxScale: opts.maxScale ?? 6,
-      panThreshold: opts.panThreshold ?? 5,
+      panThreshold: opts.panThreshold ?? 8,
     };
     this.current = this.readBox();
     this.baseW = this.current.width;
@@ -143,11 +143,7 @@ export class PanZoomController {
       this.panned = false;
       this.startX = this.lastX = ev.clientX;
       this.startY = this.lastY = ev.clientY;
-      try {
-        this.svg.setPointerCapture(ev.pointerId);
-      } catch {
-        /* ignore */
-      }
+      // 不在 pointerdown 时 setPointerCapture，避免干扰节点的 click 事件
     };
 
     const onPointerMove = (e: Event): void => {
@@ -163,6 +159,12 @@ export class PanZoomController {
         this.panned = true;
         this.svg.dataset.mlnPan = '1'; // 抑制后续 click/dblclick
         this.svg.classList.add('mln-panning');
+        // 确认开始拖动后才捕获指针，保证拖动不丢事件
+        try {
+          this.svg.setPointerCapture(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
       }
       this.panBy(dx, dy);
     };
@@ -172,13 +174,13 @@ export class PanZoomController {
       const ev = e as PointerEvent;
       this.dragging = false;
       this.svg.classList.remove('mln-panning');
-      try {
-        this.svg.releasePointerCapture(ev.pointerId);
-      } catch {
-        /* ignore */
-      }
       if (this.panned) {
-        // 延迟清除标志，让紧接着的 click/dblclick 能检测到
+        try {
+          this.svg.releasePointerCapture(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
+        // 延迟清除标志，让紧接着的 click/dblclick 能检测到并抑制
         window.setTimeout(() => {
           delete this.svg.dataset.mlnPan;
         }, 0);
