@@ -216,12 +216,17 @@ export function setAsDecision(
   let result = changeNodeShape(source, nodeId, 'diamond');
   result = removeOutgoingEdges(result, nodeId);
 
-  // 确保是目标定义在否目标前面（dagre 按定义顺序排左右，是在左否在右）
-  const parsed = parseDiagram(result);
-  const yesNode = parsed.nodes.find((n) => n.id === yesTarget);
+  // 确保是目标有节点定义（没有则补一个，标签用 ID）
+  let parsed = parseDiagram(result);
+  let yesNode = parsed.nodes.find((n) => n.id === yesTarget);
+  if (!yesNode) {
+    result = result.replace(/\s+$/, '') + `\n${yesTarget}["${yesTarget}"]\n`;
+    parsed = parseDiagram(result);
+    yesNode = parsed.nodes.find((n) => n.id === yesTarget);
+  }
   const noNode = parsed.nodes.find((n) => n.id === noTarget);
-  if (yesNode && noNode && yesNode.start > noNode.start) {
-    // 是目标定义在否目标后面，需要前移
+  if (yesNode && (noNode ? yesNode.start > noNode.start : true)) {
+    // 是目标定义在否目标后面（或否目标无定义），需要前移
     const beforeYes = result.slice(0, yesNode.start);
     // 是目标定义前有入边则不移动（避免破坏连线）
     if (/-->\s*$/.test(beforeYes)) {
@@ -232,19 +237,17 @@ export function setAsDecision(
       // 重新定位否目标
       const parsed2 = parseDiagram(result);
       const noNode2 = parsed2.nodes.find((n) => n.id === noTarget);
-      if (noNode2) {
-        const beforeNo = result.slice(0, noNode2.start);
-        if (/-->\s*$/.test(beforeNo)) {
-          // 否目标定义前有入边，插入会产生意外边，改放到 flowchart 指令之后
-          const dirMatch = result.match(/^\s*(%%\{[^}]*\}%%\s*)?(flowchart|graph)\s+\w+\s*/);
-          if (dirMatch) {
-            const insertPos = dirMatch[0].length;
-            result = result.slice(0, insertPos) + yesDef + ' ' + result.slice(insertPos);
-          }
-        } else {
-          // 安全插入到否目标前面
-          result = result.slice(0, noNode2.start) + yesDef + ' ' + result.slice(noNode2.start);
-        }
+      let insertPos = -1;
+      if (noNode2 && !/-->\s*$/.test(result.slice(0, noNode2.start))) {
+        // 否目标有定义且前无入边，插到否目标前面
+        insertPos = noNode2.start;
+      } else {
+        // 否目标无定义或前有入边，放到 flowchart 指令之后
+        const dirMatch = result.match(/^\s*(%%\{[^}]*\}%%\s*)?(flowchart|graph)\s+\w+\s*/);
+        if (dirMatch) insertPos = dirMatch[0].length;
+      }
+      if (insertPos >= 0) {
+        result = result.slice(0, insertPos) + yesDef + ' ' + result.slice(insertPos);
       }
     }
   }
