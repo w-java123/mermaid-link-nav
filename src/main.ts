@@ -379,21 +379,21 @@ export default class MermaidLinkNavPlugin extends Plugin {
             }),
           );
 
-          // 移出父节点（删除所有入边）
+          // 移除父节点（删除所有入边）
           menu.addItem((item) =>
-            item.setTitle('移出父节点').onClick(async () => {
+            item.setTitle('移除父节点').onClick(async () => {
               const newSource = removeIncomingEdges(diagramSource, nodeId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-              if (!ok) new Notice('移出父节点失败');
+              if (!ok) new Notice('移除父节点失败');
             }),
           );
 
-          // 移出子节点（删除所有出边）
+          // 移除子节点（删除所有出边）
           menu.addItem((item) =>
-            item.setTitle('移出子节点').onClick(async () => {
+            item.setTitle('移除子节点').onClick(async () => {
               const newSource = removeOutgoingEdges(diagramSource, nodeId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-              if (!ok) new Notice('移出子节点失败');
+              if (!ok) new Notice('移除子节点失败');
             }),
           );
 
