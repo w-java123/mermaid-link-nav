@@ -1,9 +1,9 @@
-﻿{
+{
   "id": "mermaid-link-nav",
   "name": "Mermaid Link Navigator",
   "version": "1.3.2",
   "minAppVersion": "1.4.0",
-  "description": "鍦?Mermaid 娴佺▼鍥捐妭鐐逛腑宓屽叆 [[绗旇閾炬帴]] 鐐瑰嚮璺宠浆锛涘苟鍙妸褰撳墠绗旇鐨勬爣棰?鍒楄〃澶х翰鑷姩鐢熸垚涓?Mermaid 娴佺▼鍥撅紝鍗曞嚮鑺傜偣璺冲洖瀵瑰簲琛屻€佸弻鍑昏仛鐒﹀垎鏀€?,
+  "description": "在 Mermaid 流程图节点中嵌入 [[笔记链接]]，Ctrl/⌘+单击跳转；并可把当前笔记的标题/列表大纲自动生成为 Mermaid 流程图，Ctrl/⌘+单击跳回对应行、双击聚焦放大。",
   "author": "Custom",
   "isDesktopOnly": false
 }
