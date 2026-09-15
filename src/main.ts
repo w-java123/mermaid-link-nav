@@ -294,7 +294,15 @@ export default class MermaidLinkNavPlugin extends Plugin {
           const targetPath = link.target.split('#')[0];
           const existed = !!this.app.metadataCache.getFirstLinkpathDest(targetPath, sourcePath);
           if (!existed && this.settings.newNoteFolder && !targetPath.includes('/')) {
-            const folder = this.app.vault.getAbstractFileByPath(this.settings.newNoteFolder);
+            let folder = this.app.vault.getAbstractFileByPath(this.settings.newNoteFolder);
+            if (!(folder instanceof TFolder)) {
+              // 文件夹不存在，自动创建（含嵌套父文件夹）
+              try {
+                folder = await this.app.vault.createFolder(this.settings.newNoteFolder);
+              } catch {
+                folder = null;
+              }
+            }
             if (folder instanceof TFolder) {
               const newPath = this.settings.newNoteFolder + '/' + targetPath + '.md';
               if (!this.app.vault.getAbstractFileByPath(newPath)) {
