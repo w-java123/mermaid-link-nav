@@ -17,7 +17,7 @@ import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
 import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, updateNoteSource } from './diagram-edit';
-import { NodeEditModal, NodeSelectModal } from './edit-modal';
+import { NodeEditModal, NodeEditResult, NodeSelectModal } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
 const PLUGIN_ID = 'mermaid-link-nav';
@@ -256,6 +256,42 @@ export default class MermaidLinkNavPlugin extends Plugin {
       new PanZoomController(svg, {}, cacheKey);
     }
 
+    // 点击图上节点选择（用于添加节点时选上下游、设置判断节点时选是/否目标）
+    const pickNode = (hintText: string, excludeId: string | null): Promise<string | null> => {
+      return new Promise((resolve) => {
+        if (!svg) { resolve(null); return; }
+        const hint = document.createElement('div');
+        hint.style.cssText = [
+          'position:fixed', 'z-index:1000', 'pointer-events:none',
+          'background:var(--background-primary)', 'border:1px solid var(--background-modifier-border)',
+          'border-radius:6px', 'padding:8px 14px', 'font-size:14px',
+          'box-shadow:0 2px 10px rgba(0,0,0,0.2)', 'white-space:nowrap',
+          'left:50%', 'top:15%', 'transform:translateX(-50%)',
+        ].join(';');
+        hint.textContent = hintText;
+        document.body.appendChild(hint);
+
+        const cleanup = (result: string | null) => {
+          svg!.removeEventListener('click', onClick, true);
+          document.removeEventListener('keydown', onKey);
+          hint.remove();
+          resolve(result);
+        };
+        const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') cleanup(null); };
+        const onClick = (ev: MouseEvent) => {
+          const targetG = (ev.target as Element)?.closest('g.node') as SVGGElement | null;
+          if (!targetG) return;
+          const targetId = extractNodeId(targetG, renderId);
+          if (!targetId || !knownIds.has(targetId)) return;
+          if (excludeId && targetId === excludeId) return;
+          ev.stopPropagation();
+          cleanup(targetId);
+        };
+        svg.addEventListener('click', onClick, true);
+        document.addEventListener('keydown', onKey);
+      });
+    };
+
     // 右键菜单：添加节点 / 编辑节点 / 删除节点
     wrapper.addEventListener('contextmenu', (ev) => {
       ev.preventDefault();
@@ -426,23 +462,43 @@ export default class MermaidLinkNavPlugin extends Plugin {
           );
         }
       } else {
-        // 空白处右键：添加节点
+        // 空白处右键：添加节点（可指定上下游，链接默认为节点名称）
         hasItems = true;
         menu.addItem((item) =>
-          item.setTitle('添加节点').onClick(() => {
-            new NodeEditModal(this.app, {
-              title: '添加节点',
-              initialLabel: '',
-              initialLink: '',
-              onSubmit: async (result) => {
-                const { newSource } = addNode(diagramSource, {
-                  label: result.label,
-                  link: result.link || undefined,
-                });
-                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-                if (!ok) new Notice('添加节点失败');
-              },
-            }).open();
+          item.setTitle('添加节点').onClick(async () => {
+            if (!svg) return;
+            // 1. 弹出编辑框输入名称和链接
+            const editResult = await new Promise<NodeEditResult | null>((resolve) => {
+              let settled = false;
+              const modal = new NodeEditModal(this.app, {
+                title: '添加节点',
+                initialLabel: '',
+                initialLink: '',
+                onSubmit: (r) => { settled = true; resolve(r); },
+              });
+              const origClose = modal.onClose;
+              modal.onClose = () => { origClose.call(modal); if (!settled) resolve(null); };
+              modal.open();
+            });
+            if (!editResult) return;
+            const label = editResult.label.trim();
+            if (!label) return;
+            const link = editResult.link.trim() || label; // 链接默认为节点名称
+
+            // 2. 点击选择上游节点（Esc 跳过）
+            const upstream = await pickNode('请点击选择上游节点（Esc 跳过）', null);
+            // 3. 点击选择下游节点（Esc 跳过，不能与上游重复）
+            const downstream = await pickNode('请点击选择下游节点（Esc 跳过）', upstream);
+
+            // 4. 创建节点并连接
+            const { newSource } = addNode(diagramSource, {
+              label,
+              link,
+              connectFrom: upstream || undefined,
+              connectTo: downstream || undefined,
+            });
+            const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+            if (!ok) new Notice('添加节点失败');
           }),
         );
       }
