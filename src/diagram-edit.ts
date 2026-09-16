@@ -51,6 +51,34 @@ function buildLabel(label: string, link?: string): string {
   return clean;
 }
 
+/** 删除指定的 from --> to 边（含带标签边），保留两端节点定义，用分号分隔 */
+export function removeEdge(source: string, fromId: string, toId: string): string {
+  const fromEsc = fromId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const toEsc = toId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // 匹配 from(可选节点定义) --> (可选标签) to，逐行处理
+  const edgeRe = new RegExp(`(${fromEsc})(.*?)?\\s*-->\\s*(?:\\|[^|]*\\|\\s*)?(${toEsc})`, 'g');
+  const lines = source.split('\n');
+  const result: string[] = [];
+  for (const rawLine of lines) {
+    const [prefix, line] = splitDirPrefix(rawLine);
+    if (/^\s*(%%|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
+      result.push(rawLine);
+      continue;
+    }
+    edgeRe.lastIndex = 0;
+    if (edgeRe.test(line)) {
+      edgeRe.lastIndex = 0;
+      // 替换边为分号，保留 from 定义和 to
+      const modified = line.replace(edgeRe, '$1$2; $3').replace(/;\s*;/g, ';').replace(/\s+;/g, ';').trimEnd();
+      if (modified.trim()) result.push(prefix + modified);
+      else if (prefix) result.push(prefix.trimEnd());
+    } else {
+      result.push(prefix + line);
+    }
+  }
+  return result.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
 /** 在源码末尾追加新节点定义和连线；若同时指定上下游，则删除原上下游直连边，使新节点夹在中间 */
 export function addNode(source: string, opts: AddNodeOptions): { newSource: string; newId: string } {
   const newId = generateId(source);
@@ -64,12 +92,9 @@ export function addNode(source: string, opts: AddNodeOptions): { newSource: stri
     addition += `\n${newId} --> ${opts.connectTo}`;
   }
   let result = source;
-  // 同时指定上下游时，删除原来的上游 --> 下游直连边（含带标签的边）
+  // 同时指定上下游时，删除原来的上游 --> 下游直连边
   if (opts.connectFrom && opts.connectTo) {
-    const from = opts.connectFrom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const to = opts.connectTo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const edgeRe = new RegExp(`${from}\\s*-->\\s*(?:\\|[^|]*\\|\\s*)?${to}\\s*;?\\s*`, 'g');
-    result = result.replace(edgeRe, '');
+    result = removeEdge(result, opts.connectFrom, opts.connectTo);
   }
   // 去掉末尾空白后追加，保证源码整洁
   const newSource = result.replace(/\s+$/, '') + addition + '\n';
