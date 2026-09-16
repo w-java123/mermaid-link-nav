@@ -465,44 +465,37 @@ export default class MermaidLinkNavPlugin extends Plugin {
         // 空白处右键：添加节点（可指定上下游，链接默认为节点名称）
         hasItems = true;
         menu.addItem((item) =>
-          item.setTitle('添加节点').onClick(async () => {
+          item.setTitle('添加节点').onClick(() => {
             if (!svg) return;
-            // 1. 弹出编辑框输入名称和链接
-            const editResult = await new Promise<NodeEditResult | null>((resolve) => {
-              let settled = false;
-              const modal = new NodeEditModal(this.app, {
-                title: '添加节点',
-                initialLabel: '',
-                initialLink: '',
-                onSubmit: (r) => { settled = true; resolve(r); },
-              });
-              const origClose = modal.onClose;
-              modal.onClose = () => { origClose.call(modal); if (!settled) resolve(null); };
-              modal.open();
-            });
-            if (!editResult) return;
-            const label = editResult.label.trim();
-            if (!label) return;
-            const link = editResult.link.trim() || label; // 链接默认为节点名称
+            new NodeEditModal(this.app, {
+              title: '添加节点',
+              initialLabel: '',
+              initialLink: '',
+              onSubmit: async (result) => {
+                const label = result.label.trim();
+                if (!label) return;
+                const link = result.link.trim() || label; // 链接默认为节点名称
 
-            // 2. 点击选择上游节点（Esc 跳过）
-            const upstream = await pickNode('请点击选择【上游】节点（Esc 跳过）', '【上游】', null);
-            // 3. 点击选择下游节点（Esc 跳过，不能与上游重复）
-            const downstream = await pickNode('请点击选择【下游】节点（Esc 跳过）', '【下游】', upstream);
+                // 点击选择上游节点（Esc 跳过）
+                const upstream = await pickNode('请点击选择【上游】节点（Esc 跳过）', '【上游】', null);
+                // 点击选择下游节点（Esc 跳过，不能与上游重复）
+                const downstream = await pickNode('请点击选择【下游】节点（Esc 跳过）', '【下游】', upstream);
 
-            // 4. 创建节点并连接
-            const { newSource } = addNode(diagramSource, {
-              label,
-              link,
-              connectFrom: upstream || undefined,
-              connectTo: downstream || undefined,
-            });
-            const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-            if (!ok) {
-              const file = this.app.vault.getFileByPath(sourcePath);
-              if (!file) new Notice('添加失败：找不到笔记文件');
-              else new Notice('添加失败：笔记源码已变化，请重新打开笔记后再试');
-            }
+                // 创建节点并连接
+                const { newSource } = addNode(diagramSource, {
+                  label,
+                  link,
+                  connectFrom: upstream || undefined,
+                  connectTo: downstream || undefined,
+                });
+                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                if (!ok) {
+                  const file = this.app.vault.getFileByPath(sourcePath);
+                  if (!file) new Notice('添加失败：找不到笔记文件');
+                  else new Notice('添加失败：笔记源码已变化，请重新打开笔记后再试');
+                }
+              },
+            }).open();
           }),
         );
       }

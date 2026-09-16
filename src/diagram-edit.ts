@@ -51,7 +51,7 @@ function buildLabel(label: string, link?: string): string {
   return clean;
 }
 
-/** 在源码末尾追加新节点定义和连线 */
+/** 在源码末尾追加新节点定义和连线；若同时指定上下游，则删除原上下游直连边，使新节点夹在中间 */
 export function addNode(source: string, opts: AddNodeOptions): { newSource: string; newId: string } {
   const newId = generateId(source);
   const label = buildLabel(opts.label, opts.link);
@@ -63,8 +63,16 @@ export function addNode(source: string, opts: AddNodeOptions): { newSource: stri
   if (opts.connectTo) {
     addition += `\n${newId} --> ${opts.connectTo}`;
   }
+  let result = source;
+  // 同时指定上下游时，删除原来的上游 --> 下游直连边（含带标签的边）
+  if (opts.connectFrom && opts.connectTo) {
+    const from = opts.connectFrom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const to = opts.connectTo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const edgeRe = new RegExp(`${from}\\s*-->\\s*(?:\\|[^|]*\\|\\s*)?${to}\\s*;?\\s*`, 'g');
+    result = result.replace(edgeRe, '');
+  }
   // 去掉末尾空白后追加，保证源码整洁
-  const newSource = source.replace(/\s+$/, '') + addition + '\n';
+  const newSource = result.replace(/\s+$/, '') + addition + '\n';
   return { newSource, newId };
 }
 
@@ -321,36 +329,36 @@ export async function updateNoteSource(
   const normContent = content.replace(/\r\n/g, '\n');
   const oldNorm = oldSource.replace(/\r\n/g, '\n').trim();
 
-  const blockRe = /```(?:mermaid|mermaid-link|mmd)[^\n]*\n([\s\S]*?)```/g;
+  // 支持 ``` 和 ~~~ 两种代码块标记，允许行首空格
+  const blockRe = /^[ \t]*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^[ \t]*\1/gm;
+  const blocks: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(normContent)) !== null) {
+    blocks.push(m[2].replace(/\r\n/g, '\n').trim());
+  }
+
   let replaced = false;
-  let flowchartBlockIndex = -1;
-  let blockIndex = 0;
-  const newContent = normContent.replace(blockRe, (full, inner: string) => {
-    const idx = blockIndex++;
-    const innerNorm = inner.replace(/\r\n/g, '\n').trim();
-    // 记录第一个包含 flowchart/graph 的代码块位置（备用）
-    if (flowchartBlockIndex < 0 && /(flowchart|graph)\s+\w+/.test(innerNorm)) {
-      flowchartBlockIndex = idx;
-    }
+  let flowchartBlockIndex = blocks.findIndex((b) => /(flowchart|graph)\s+\w+/.test(b));
+
+  const newContent = normContent.replace(blockRe, (full, marker: string, inner: string) => {
     if (replaced) return full;
-    // 精确匹配
+    const innerNorm = inner.replace(/\r\n/g, '\n').trim();
     if (innerNorm === oldNorm) {
       replaced = true;
       const header = full.slice(0, full.indexOf('\n') + 1);
-      return header + newSource.replace(/\n$/, '') + '\n```';
+      return header + newSource.replace(/\n$/, '') + '\n' + marker;
     }
     return full;
   });
 
-  // 精确匹配失败时，回退到第一个 flowchart 代码块（避免因空白/换行细微差异失败）
   if (!replaced && flowchartBlockIndex >= 0) {
-    blockIndex = 0;
-    const newContent2 = normContent.replace(blockRe, (full, inner: string) => {
-      const idx = blockIndex++;
-      if (idx === flowchartBlockIndex && !replaced) {
+    let idx = 0;
+    const newContent2 = normContent.replace(blockRe, (full, marker: string, inner: string) => {
+      const curIdx = idx++;
+      if (curIdx === flowchartBlockIndex && !replaced) {
         replaced = true;
         const header = full.slice(0, full.indexOf('\n') + 1);
-        return header + newSource.replace(/\n$/, '') + '\n```';
+        return header + newSource.replace(/\n$/, '') + '\n' + marker;
       }
       return full;
     });
