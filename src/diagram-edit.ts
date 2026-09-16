@@ -318,17 +318,19 @@ export async function updateNoteSource(
   if (!file) return false;
 
   const content = await app.vault.read(file);
-  const oldTrimmed = oldSource.trim();
+  // 规范化换行符，避免 CRLF/LF 差异导致匹配失败
+  const normContent = content.replace(/\r\n/g, '\n');
+  const oldNorm = oldSource.replace(/\r\n/g, '\n').trim();
 
   // 匹配 ```mermaid ... ``` 代码块
   const blockRe = /```(?:mermaid|mermaid-link|mmd)[^\n]*\n([\s\S]*?)```/g;
   let match: RegExpExecArray | null;
   let replaced = false;
-  const newContent = content.replace(blockRe, (full, inner: string) => {
+  const newContent = normContent.replace(blockRe, (full, inner: string) => {
     if (replaced) return full;
-    if (inner.trim() === oldTrimmed) {
+    const innerNorm = inner.replace(/\r\n/g, '\n').trim();
+    if (innerNorm === oldNorm) {
       replaced = true;
-      // 保留代码块开头标记，替换内部内容
       const header = full.slice(0, full.indexOf('\n') + 1);
       return header + newSource.replace(/\n$/, '') + '\n```';
     }

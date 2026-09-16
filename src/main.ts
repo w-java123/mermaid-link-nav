@@ -257,18 +257,18 @@ export default class MermaidLinkNavPlugin extends Plugin {
     }
 
     // 点击图上节点选择（用于添加节点时选上下游、设置判断节点时选是/否目标）
-    const pickNode = (hintText: string, excludeId: string | null): Promise<string | null> => {
+    const pickNode = (hintText: string, redWord: string, excludeId: string | null): Promise<string | null> => {
       return new Promise((resolve) => {
         if (!svg) { resolve(null); return; }
         const hint = document.createElement('div');
         hint.style.cssText = [
           'position:fixed', 'z-index:1000', 'pointer-events:none',
-          'background:var(--background-primary)', 'border:1px solid var(--background-modifier-border)',
-          'border-radius:6px', 'padding:8px 14px', 'font-size:14px',
-          'box-shadow:0 2px 10px rgba(0,0,0,0.2)', 'white-space:nowrap',
-          'left:50%', 'top:15%', 'transform:translateX(-50%)',
+          'background:var(--background-primary)', 'border:2px solid var(--interactive-accent)',
+          'border-radius:8px', 'padding:14px 24px', 'font-size:18px',
+          'box-shadow:0 4px 20px rgba(0,0,0,0.3)', 'white-space:nowrap',
+          'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
         ].join(';');
-        hint.textContent = hintText;
+        hint.innerHTML = hintText.replace(redWord, `<span style="color:var(--text-error);font-weight:700;font-size:22px">${redWord}</span>`);
         document.body.appendChild(hint);
 
         const cleanup = (result: string | null) => {
@@ -486,9 +486,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
             const link = editResult.link.trim() || label; // 链接默认为节点名称
 
             // 2. 点击选择上游节点（Esc 跳过）
-            const upstream = await pickNode('请点击选择上游节点（Esc 跳过）', null);
+            const upstream = await pickNode('请点击选择【上游】节点（Esc 跳过）', '【上游】', null);
             // 3. 点击选择下游节点（Esc 跳过，不能与上游重复）
-            const downstream = await pickNode('请点击选择下游节点（Esc 跳过）', upstream);
+            const downstream = await pickNode('请点击选择【下游】节点（Esc 跳过）', '【下游】', upstream);
 
             // 4. 创建节点并连接
             const { newSource } = addNode(diagramSource, {
@@ -498,7 +498,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
               connectTo: downstream || undefined,
             });
             const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-            if (!ok) new Notice('添加节点失败');
+            if (!ok) {
+              const file = this.app.vault.getFileByPath(sourcePath);
+              if (!file) new Notice('添加失败：找不到笔记文件');
+              else new Notice('添加失败：笔记源码已变化，请重新打开笔记后再试');
+            }
           }),
         );
       }
