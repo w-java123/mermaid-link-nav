@@ -425,6 +425,26 @@ export default class MermaidLinkNavPlugin extends Plugin {
             }),
           );
         }
+      } else {
+        // 空白处右键：添加节点
+        hasItems = true;
+        menu.addItem((item) =>
+          item.setTitle('添加节点').onClick(() => {
+            new NodeEditModal(this.app, {
+              title: '添加节点',
+              initialLabel: '',
+              initialLink: '',
+              onSubmit: async (result) => {
+                const { newSource } = addNode(diagramSource, {
+                  label: result.label,
+                  link: result.link || undefined,
+                });
+                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                if (!ok) new Notice('添加节点失败');
+              },
+            }).open();
+          }),
+        );
       }
       if (hasItems) menu.showAtMouseEvent(ev);
     });
