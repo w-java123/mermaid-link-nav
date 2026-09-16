@@ -318,17 +318,22 @@ export async function updateNoteSource(
   if (!file) return false;
 
   const content = await app.vault.read(file);
-  // 规范化换行符，避免 CRLF/LF 差异导致匹配失败
   const normContent = content.replace(/\r\n/g, '\n');
   const oldNorm = oldSource.replace(/\r\n/g, '\n').trim();
 
-  // 匹配 ```mermaid ... ``` 代码块
   const blockRe = /```(?:mermaid|mermaid-link|mmd)[^\n]*\n([\s\S]*?)```/g;
-  let match: RegExpExecArray | null;
   let replaced = false;
+  let flowchartBlockIndex = -1;
+  let blockIndex = 0;
   const newContent = normContent.replace(blockRe, (full, inner: string) => {
-    if (replaced) return full;
+    const idx = blockIndex++;
     const innerNorm = inner.replace(/\r\n/g, '\n').trim();
+    // 记录第一个包含 flowchart/graph 的代码块位置（备用）
+    if (flowchartBlockIndex < 0 && /(flowchart|graph)\s+\w+/.test(innerNorm)) {
+      flowchartBlockIndex = idx;
+    }
+    if (replaced) return full;
+    // 精确匹配
     if (innerNorm === oldNorm) {
       replaced = true;
       const header = full.slice(0, full.indexOf('\n') + 1);
@@ -336,6 +341,24 @@ export async function updateNoteSource(
     }
     return full;
   });
+
+  // 精确匹配失败时，回退到第一个 flowchart 代码块（避免因空白/换行细微差异失败）
+  if (!replaced && flowchartBlockIndex >= 0) {
+    blockIndex = 0;
+    const newContent2 = normContent.replace(blockRe, (full, inner: string) => {
+      const idx = blockIndex++;
+      if (idx === flowchartBlockIndex && !replaced) {
+        replaced = true;
+        const header = full.slice(0, full.indexOf('\n') + 1);
+        return header + newSource.replace(/\n$/, '') + '\n```';
+      }
+      return full;
+    });
+    if (replaced) {
+      await app.vault.modify(file, newContent2);
+      return true;
+    }
+  }
 
   if (!replaced) return false;
   await app.vault.modify(file, newContent);
