@@ -42,11 +42,11 @@ function generateId(source: string): string {
   return `N${i}`;
 }
 
-/** 构建节点标签文本：有链接则 "label [[link]]"，否则 "label" */
+/** 构建节点标签文本：有链接则 "[[link|label]]"，否则 "label" */
 function buildLabel(label: string, link?: string): string {
   const clean = label.trim();
   if (link && link.trim()) {
-    return `${clean} [[${link.trim()}]]`;
+    return `[[${link.trim()}|${clean}]]`;
   }
   return clean;
 }

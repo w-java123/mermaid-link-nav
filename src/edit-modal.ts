@@ -105,6 +105,15 @@ export class NodeEditModal extends Modal {
           this.close();
         }),
     );
+
+    // 回车触发确定
+    contentEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        const btn = contentEl.querySelector('button.mod-cta') as HTMLButtonElement | null;
+        btn?.click();
+      }
+    });
   }
 
   onClose(): void {
