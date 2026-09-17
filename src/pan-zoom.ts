@@ -173,33 +173,19 @@ export class PanZoomController {
       gx = parseFloat(m[1]);
       gy = parseFloat(m[2]);
     }
-    const gw = bbox.width;
-    const gh = bbox.height;
-    if (gw <= 0 || gh <= 0) return;
-    // Target view: keep padding around node, zoom to ~3x node width
-    const padX = gw * 1.0;
-    const padY = gh * 1.5;
-    let targetW = gw + padX * 2;
-    let targetH = targetW * this.ratio;
-    if (targetH < gh + padY * 2) {
-      targetH = gh + padY * 2;
-      targetW = targetH / this.ratio;
-    }
-    // Clamp to max zoom
-    const minW = this.baseW / this.opts.maxScale;
-    if (targetW < minW) {
-      targetW = minW;
-      targetH = targetW * this.ratio;
-    }
+    // Pan only, no zoom: keep current viewBox size, center the node
+    const cw = this.current.width;
+    const ch = this.current.height;
+    if (cw <= 0 || ch <= 0) return;
     const target: Box = {
-      x: gx - targetW / 2,
-      y: gy - targetH / 2,
-      width: targetW,
-      height: targetH,
+      x: gx - cw / 2,
+      y: gy - ch / 2,
+      width: cw,
+      height: ch,
     };
     this.animateTo(target);
   }
-  /** 以屏幕坐标为中心缩放 */
+    // Clamp to max zoom
   private zoomAt(clientX: number, clientY: number, factor: number): void {
     const rect = this.svg.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
