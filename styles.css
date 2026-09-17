@@ -13,10 +13,20 @@
 
 /* 当前节点按钮栏（选择 + 定位，同一行） */
 .mln-btn-bar {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  z-index: 1000;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
-  margin: 4px 0 8px 0;
+  padding: 6px 8px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  max-width: min(420px, 96vw);
 }
 
 .mln-select-btn {
