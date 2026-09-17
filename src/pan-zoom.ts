@@ -141,8 +141,8 @@ export class PanZoomController {
 
   private rafId = 0;
 
-  /** 动画过渡到目标 viewBox */
-  private animateTo(target: Box, duration = 350): void {
+  /** 动画过渡到目标 viewBox；完成后回调 onDone */
+  private animateTo(target: Box, duration = 350, onDone?: () => void): void {
     cancelAnimationFrame(this.rafId);
     const start = { ...this.current };
     const t0 = performance.now();
@@ -155,9 +155,29 @@ export class PanZoomController {
         width: start.width + (target.width - start.width) * ease,
         height: start.height + (target.height - start.height) * ease,
       });
-      if (t < 1) this.rafId = requestAnimationFrame(step);
+      if (t < 1) {
+        this.rafId = requestAnimationFrame(step);
+      } else {
+        onDone?.();
+      }
     };
     this.rafId = requestAnimationFrame(step);
+  }
+
+  /** 定位完成后滚动页面，把节点带进可视区域（竖长图 svg 超出屏幕时必需） */
+  private scrollNodeIntoView(el: SVGGElement): void {
+    try {
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (r.height === 0 || vh <= 0) return;
+      const cy = r.top + r.height / 2;
+      const margin = 90;
+      if (cy < margin || cy > vh - margin) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   /** 聚焦到指定节点元素：居中并适当放大，不隐藏其他节点 */
@@ -202,7 +222,7 @@ export class PanZoomController {
           width: this.baseW,
           height: this.baseH,
         };
-    this.animateTo(target);
+    this.animateTo(target, 350, () => this.scrollNodeIntoView(el));
   }
 
   /** Zoom around the screen point */
