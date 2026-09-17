@@ -29,6 +29,13 @@
   max-width: min(420px, 96vw);
 }
 
+/** 手机端（窄屏）：按钮栏下移，避开 Obsidian 顶部标题栏，避免遮挡 */
+@media (max-width: 600px) {
+  .mln-btn-bar {
+    top: 110px;
+  }
+}
+
 .mln-select-btn {
   display: inline-block;
   padding: 5px 16px;

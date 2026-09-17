@@ -707,6 +707,15 @@ export default class MermaidLinkNavPlugin extends Plugin {
       clone.setAttribute('viewBox', `0 0 ${base.width} ${base.height}`);
       clone.setAttribute('width', String(base.width));
       clone.setAttribute('height', String(base.height));
+      // 导出文件显示时居中
+      clone.setAttribute('style', 'display:block;margin:0 auto;max-width:100%;height:auto;');
+      // 移除可能引入外部资源（污染 canvas）的引用，保证 PNG 可导出
+      clone.querySelectorAll('image, foreignObject').forEach((el) => el.remove());
+      clone.querySelectorAll('style').forEach((st) => {
+        st.textContent = (st.textContent ?? '')
+          .replace(/@import[^;]+;/gi, '')
+          .replace(/url\(\s*(?!#)[^)]*\)/gi, 'url(#none)');
+      });
       // 当前节点高亮是 CSS 类，脱离页面后失效，内联为 SVG 属性保留
       const q = '.mln-current-node rect, .mln-current-node path, .mln-current-node circle, .mln-current-node polygon, .mln-current-node ellipse';
       const origShapes = svg.querySelectorAll<SVGElement>(q);
@@ -734,13 +743,14 @@ export default class MermaidLinkNavPlugin extends Plugin {
       if (!clone || !base) { new Notice('导出失败：找不到 SVG'); return; }
       new Notice('正在导出 PNG…');
       const xml = new XMLSerializer().serializeToString(clone);
-      const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }));
+      // 用 data URL 加载（避免 blob URL 在部分环境触发跨域限制）
+      const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
       try {
         const img = new Image();
         await new Promise<void>((res, rej) => {
           img.onload = () => res();
           img.onerror = () => rej(new Error('SVG 图片加载失败'));
-          img.src = url;
+          img.src = dataUrl;
         });
         // 2 倍高清；超大图自动降级避免 canvas 尺寸上限（16384 边）
         const maxEdge = Math.max(base.width, base.height);
@@ -751,14 +761,18 @@ export default class MermaidLinkNavPlugin extends Plugin {
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('无法创建画布');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        // 画布被跨域资源污染时提前拦截，给出明确提示
+        try {
+          ctx.getImageData(0, 0, 1, 1);
+        } catch {
+          throw new Error('画布受浏览器跨域限制，无法导出 PNG，请改用 SVG 导出');
+        }
         const pngBlob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
         if (!pngBlob) throw new Error('PNG 编码失败');
         downloadBlob(pngBlob, `${fileNameBase}.png`);
         new Notice(`PNG 已开始下载（${canvas.width}×${canvas.height}）`);
       } catch (e) {
         new Notice(`PNG 导出失败：${e instanceof Error ? e.message : String(e)}`);
-      } finally {
-        URL.revokeObjectURL(url);
       }
     };
     const exportSvgBtn = btnBar.createDiv({ cls: 'mln-export-btn', text: '💾导出SVG' });
