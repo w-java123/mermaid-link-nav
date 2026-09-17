@@ -10,6 +10,7 @@ import {
   Setting,
   TFile,
   TFolder,
+  AbstractInputSuggest,
 } from 'obsidian';
 import mermaid from 'mermaid';
 import { PanZoomController } from './pan-zoom';
@@ -39,8 +40,10 @@ interface MermaidLinkNavSettings {
   hoverHighlight: boolean;
   /** 点击不存在的链接时，自动创建笔记的目标文件夹（留空=Obsidian 默认位置） */
   newNoteFolder: string;
-  /** 导出 SVG/PNG 的存放文件夹（留空=使用当前笔记名作为文件夹名） */
-  exportFolder: string;
+  /** PNG 导出文件夹（留空=使用「笔记名+PNG图片」自动命名） */
+  exportFolderPng: string;
+  /** SVG 导出文件夹（留空=使用「笔记名+SVG图片」自动命名） */
+  exportFolderSvg: string;
 }
 
 const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
@@ -51,8 +54,35 @@ const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
   showTooltip: true,
   hoverHighlight: true,
   newNoteFolder: '',
-  exportFolder: '',
+  exportFolderPng: '',
+  exportFolderSvg: '',
 };
+
+/** 文件夹选择器：Obsidian 当前版本未导出 FolderSuggest，这里基于 AbstractInputSuggest 实现 */
+class FolderSuggest extends AbstractInputSuggest<string> {
+  private target: HTMLInputElement;
+  constructor(app: App, inputEl: HTMLInputElement) {
+    super(app, inputEl);
+    this.target = inputEl;
+  }
+  getSuggestions(inputStr: string): string[] {
+    const lower = inputStr.toLowerCase();
+    return this.app.vault
+      .getAllLoadedFiles()
+      .filter((f): f is TFolder => f instanceof TFolder)
+      .map((f) => f.path)
+      .filter((p) => p.toLowerCase().includes(lower))
+      .slice(0, 50);
+  }
+  renderSuggestion(item: string, el: HTMLElement): void {
+    el.setText(item);
+  }
+  selectSuggestion(item: string): void {
+    this.setValue(item);
+    this.target.dispatchEvent(new Event('input', { bubbles: true }));
+    this.close();
+  }
+}
 
 let renderSeq = 0;
 
@@ -678,7 +708,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
     const fileNameBase = (sourcePath.split('/').pop() || 'mermaid-diagram').replace(/\.(md|markdown)$/i, '');
     // 导出目标文件夹：默认「笔记名+格式」命名（如：找工作流程的PNG图片），可在设置中更改
     const getExportFolder = async (kind: 'svg' | 'png'): Promise<string> => {
-      let folder = (this.settings.exportFolder || '').trim().replace(/^\/+|\/+$/g, '');
+      const key = kind === 'png' ? this.settings.exportFolderPng : this.settings.exportFolderSvg;
+      let folder = (key || '').trim().replace(/^\/+|\/+$/g, '');
       if (!folder) {
         const active = this.app.workspace.getActiveFile();
         const base = active ? active.basename : 'Mermaid导图';
@@ -1084,17 +1115,32 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('导出').setHeading();
 
     new Setting(containerEl)
-      .setName('导出图片的文件夹')
-      .setDesc('导出 SVG/PNG 的存放位置。留空时自动使用「笔记名+格式」命名文件夹（PNG 导出到“找工作流程的PNG图片”，SVG 导出到“找工作流程的SVG图片”）；也可填写自定义路径，如“导出图片”。')
-      .addText((text) =>
+      .setName('PNG 导出文件夹')
+      .setDesc('导出 PNG 图片的存放位置。留空时自动使用「笔记名的PNG图片」文件夹（如“找工作流程的PNG图片”）；点击输入框可从仓库中选择固定文件夹，之后所有 PNG 都导出到那里。')
+      .addText((text) => {
+        new FolderSuggest(this.app, text.inputEl);
         text
-          .setPlaceholder('留空 = 使用笔记名作为文件夹')
-          .setValue(this.plugin.settings.exportFolder)
+          .setPlaceholder('留空 = 笔记名的PNG图片')
+          .setValue(this.plugin.settings.exportFolderPng)
           .onChange(async (v) => {
-            this.plugin.settings.exportFolder = v.trim().replace(/^\/+|\/+$/g, '');
+            this.plugin.settings.exportFolderPng = v.trim().replace(/^\/+|\/+$/g, '');
             await this.plugin.saveSettings();
-          }),
-      );
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('SVG 导出文件夹')
+      .setDesc('导出 SVG 图片的存放位置。留空时自动使用「笔记名的SVG图片」文件夹（如“找工作流程的SVG图片”）；点击输入框可从仓库中选择固定文件夹，之后所有 SVG 都导出到那里。')
+      .addText((text) => {
+        new FolderSuggest(this.app, text.inputEl);
+        text
+          .setPlaceholder('留空 = 笔记名的SVG图片')
+          .setValue(this.plugin.settings.exportFolderSvg)
+          .onChange(async (v) => {
+            this.plugin.settings.exportFolderSvg = v.trim().replace(/^\/+|\/+$/g, '');
+            await this.plugin.saveSettings();
+          });
+      });
 
     new Setting(containerEl).setName('笔记创建').setHeading();
 
