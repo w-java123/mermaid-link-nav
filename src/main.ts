@@ -758,6 +758,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
         canvas.height = Math.max(1, Math.round(base.height * scale));
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('无法创建画布');
+        // 纯白背景（默认 SVG 背景透明，导出 PNG 时填白）
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         // 画布被跨域资源污染时提前拦截，给出明确提示
         try {
