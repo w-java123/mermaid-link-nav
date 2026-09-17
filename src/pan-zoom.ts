@@ -158,23 +158,25 @@ export class PanZoomController {
   }
 
   /** 聚焦到指定节点元素：居中并适当放大，不隐藏其他节点 */
+  /** 鑱氱劍鍒版寚瀹氳妭鐐瑰厓绱狅細灞呬腑骞堕€傚綋鏀惧ぇ锛屼笉闅愯棌鍏朵粬鑺傜偣 */
+  /** Focus to a node element: center it and zoom in, keeping other nodes visible. */
   focusElement(el: SVGGElement): void {
     const bbox = el.getBBox();
     if (bbox.width === 0 || bbox.height === 0) return;
-    // 关键：mermaid 节点带 transform，getBBox() 返回的是节点局部坐标，
-    // 必须通过 getScreenCTM 转换到 svg 全局用户坐标，否则 viewBox 会定位到空白处（白屏）
-    const elCtm = el.getScreenCTM();
-    const svgCtm = this.svg.getScreenCTM();
-    if (!elCtm || !svgCtm) return;
-    const ctm = svgCtm.inverse().multiply(elCtm);
-    const p1 = new DOMPoint(bbox.x, bbox.y).matrixTransform(ctm);
-    const p2 = new DOMPoint(bbox.x + bbox.width, bbox.y + bbox.height).matrixTransform(ctm);
-    const gx = p1.x;
-    const gy = p1.y;
-    const gw = p2.x - p1.x;
-    const gh = p2.y - p1.y;
+    // Key: mermaid draws each node centered at transform="translate(x,y)".
+    // Parse that coordinate as the node center (getScreenCTM is unreliable here).
+    let gx = bbox.x + bbox.width / 2;
+    let gy = bbox.y + bbox.height / 2;
+    const tf = el.getAttribute('transform') || '';
+    const m = /translate\(\s*([-\d.eE]+)\s*[,\s]\s*([-\d.eE]+)\s*\)/.exec(tf);
+    if (m) {
+      gx = parseFloat(m[1]);
+      gy = parseFloat(m[2]);
+    }
+    const gw = bbox.width;
+    const gh = bbox.height;
     if (gw <= 0 || gh <= 0) return;
-    // 目标视野：节点周围留 padding，放大到节点宽度的 3 倍
+    // Target view: keep padding around node, zoom to ~3x node width
     const padX = gw * 1.0;
     const padY = gh * 1.5;
     let targetW = gw + padX * 2;
@@ -183,15 +185,15 @@ export class PanZoomController {
       targetH = gh + padY * 2;
       targetW = targetH / this.ratio;
     }
-    // 限制不超过最大缩放
+    // Clamp to max zoom
     const minW = this.baseW / this.opts.maxScale;
     if (targetW < minW) {
       targetW = minW;
       targetH = targetW * this.ratio;
     }
     const target: Box = {
-      x: gx + gw / 2 - targetW / 2,
-      y: gy + gh / 2 - targetH / 2,
+      x: gx - targetW / 2,
+      y: gy - targetH / 2,
       width: targetW,
       height: targetH,
     };
