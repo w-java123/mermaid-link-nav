@@ -634,6 +634,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     // 当前节点按钮区域（选择当前节点 + 定位当前节点，同一行）
     const btnBar = wrapper.createDiv({ cls: 'mln-btn-bar' });
+    if (svg) wrapper.insertBefore(btnBar, svg); // 按钮栏放在 svg 上方（此前在 svg 下方被长图藏住）
     const selectBtn = btnBar.createDiv({ cls: 'mln-select-btn', text: currentNodeId ? '重新选择当前正在执行的节点' : '选择当前正在执行的节点' });
     let locateBtn: HTMLDivElement | null = null;
     if (currentNodeId && knownIds.has(currentNodeId)) {
