@@ -11,35 +11,11 @@
   -webkit-user-select: none;
 }
 
-/* 聚焦时的复位按钮 */
-.mln-reset-btn {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  z-index: 2;
-  display: inline-block;
-  padding: 3px 10px;
-  font-size: var(--font-ui-smaller);
-  color: var(--text-on-accent);
-  background: var(--interactive-accent);
-  border-radius: 12px;
-  cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-  opacity: 0.92;
-}
-
-.mln-reset-btn:hover {
-  opacity: 1;
-}
-
-/* 定位到当前节点按钮 */
+/* 定位到当前节点按钮（放在图上方） */
 .mln-locate-btn {
-  position: absolute;
-  top: 6px;
-  left: 8px;
-  z-index: 2;
   display: inline-block;
-  padding: 3px 10px;
+  margin: 4px 0 8px 0;
+  padding: 4px 14px;
   font-size: var(--font-ui-smaller);
   color: var(--text-on-accent);
   background: var(--color-green);
@@ -51,27 +27,6 @@
 
 .mln-locate-btn:hover {
   opacity: 1;
-}
-
-/* 当前选中节点高亮（橙色描边 + 轻微发光） */
-.mermaid-link-wrapper g.node.mln-current-node rect,
-.mermaid-link-wrapper g.node.mln-current-node polygon,
-.mermaid-link-wrapper g.node.mln-current-node circle,
-.mermaid-link-wrapper g.node.mln-current-node ellipse,
-.mermaid-link-wrapper g.node.mln-current-node path.label-container {
-  stroke: var(--color-orange) !important;
-  stroke-width: 3px !important;
-  filter: drop-shadow(0 0 4px var(--color-orange));
-}
-
-/* 当前聚焦根节点描边强调 */
-.mermaid-link-wrapper g.node.mln-focus-root rect,
-.mermaid-link-wrapper g.node.mln-focus-root polygon,
-.mermaid-link-wrapper g.node.mln-focus-root circle,
-.mermaid-link-wrapper g.node.mln-focus-root ellipse,
-.mermaid-link-wrapper g.node.mln-focus-root path.label-container {
-  stroke: var(--interactive-accent);
-  stroke-width: 2px;
 }
 
 .mermaid-link-wrapper[data-mln-state='loading'] {

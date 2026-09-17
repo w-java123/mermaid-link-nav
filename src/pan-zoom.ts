@@ -136,6 +136,55 @@ export class PanZoomController {
     this.current = this.readBox();
   }
 
+  private rafId = 0;
+
+  /** 动画过渡到目标 viewBox */
+  private animateTo(target: Box, duration = 350): void {
+    cancelAnimationFrame(this.rafId);
+    const start = { ...this.current };
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const t = Math.min((now - t0) / duration, 1);
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      this.writeBox({
+        x: start.x + (target.x - start.x) * ease,
+        y: start.y + (target.y - start.y) * ease,
+        width: start.width + (target.width - start.width) * ease,
+        height: start.height + (target.height - start.height) * ease,
+      });
+      if (t < 1) this.rafId = requestAnimationFrame(step);
+    };
+    this.rafId = requestAnimationFrame(step);
+  }
+
+  /** 聚焦到指定节点元素：居中并适当放大，不隐藏其他节点 */
+  focusElement(el: SVGGElement): void {
+    const bbox = el.getBBox();
+    if (bbox.width === 0 || bbox.height === 0) return;
+    // 目标视野：节点周围留 padding，放大到节点宽度的 3 倍
+    const padX = bbox.width * 1.0;
+    const padY = bbox.height * 1.5;
+    let targetW = bbox.width + padX * 2;
+    let targetH = targetW * this.ratio;
+    if (targetH < bbox.height + padY * 2) {
+      targetH = bbox.height + padY * 2;
+      targetW = targetH / this.ratio;
+    }
+    // 限制不超过最大缩放
+    const minW = this.baseW / this.opts.maxScale;
+    if (targetW < minW) {
+      targetW = minW;
+      targetH = targetW * this.ratio;
+    }
+    const target: Box = {
+      x: bbox.x + bbox.width / 2 - targetW / 2,
+      y: bbox.y + bbox.height / 2 - targetH / 2,
+      width: targetW,
+      height: targetH,
+    };
+    this.animateTo(target);
+  }
+
   /** 以屏幕坐标为中心缩放 */
   private zoomAt(clientX: number, clientY: number, factor: number): void {
     const rect = this.svg.getBoundingClientRect();
@@ -262,6 +311,7 @@ export class PanZoomController {
   }
 
   dispose(): void {
+    cancelAnimationFrame(this.rafId);
     this.observer?.disconnect();
     for (const h of this.handlers) {
       this.el.removeEventListener(h.type, h.listener, h.options);

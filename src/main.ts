@@ -12,7 +12,6 @@ import {
   TFolder,
 } from 'obsidian';
 import mermaid from 'mermaid';
-import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
@@ -327,10 +326,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
     } catch { /* ignore */ }
 
     // 画布式平移缩放（滚轮缩放 / 拖动平移 / 触摸板手势）
+    let panZoom: PanZoomController | null = null;
     if (svg) {
       // 用笔记路径作为稳定 cacheKey，编辑节点/跳转返回后重新渲染仍能恢复视图状态
       const cacheKey = sourcePath;
-      new PanZoomController(svg, {}, cacheKey);
+      panZoom = new PanZoomController(svg, {}, cacheKey);
     }
 
     // 点击图上节点选择（用于添加节点时选上下游、设置判断节点时选是/否目标）
@@ -418,15 +418,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
             item.setTitle(isCurrent ? '取消当前节点' : '设为当前节点').onClick(() => {
               if (isCurrent) {
                 setCurrentNode(sourcePath, null);
-                g.classList.remove('mln-current-node');
-                if (locateBtn) locateBtn.style.display = 'none';
+                if (locateBtn) locateBtn.remove();
               } else {
-                // 移除旧节点高亮
-                nodeEls.forEach((el) => el.classList.remove('mln-current-node'));
                 setCurrentNode(sourcePath, nodeId);
-                g.classList.add('mln-current-node');
-                if (locateBtn) locateBtn.style.display = '';
-                new Notice('已设为当前节点');
+                new Notice('已设为当前节点，刷新笔记后显示定位按钮');
               }
             }),
           );
@@ -648,57 +643,22 @@ export default class MermaidLinkNavPlugin extends Plugin {
     // 当前选中节点
     const currentNodeId = getCurrentNode(sourcePath);
 
-    // 聚焦控制器（始终创建，供"定位当前节点"按钮使用）
-    let controller: DiagramFocusController | null = null;
-    let resetBtn: HTMLDivElement | null = null;
+    // 定位到当前节点按钮（放在图上方，正常流布局）
     let locateBtn: HTMLDivElement | null = null;
-    if (svg) {
-      controller = new DiagramFocusController(svg, edges, {
-        renderId,
-        knownIds,
-        includeAncestors: this.settings.includeAncestors,
-        duration: this.settings.zoomDuration,
-        paddingRatio: this.settings.zoomPaddingRatio,
-        onFocusChange: (focused) => {
-          if (resetBtn) resetBtn.style.display = focused ? '' : 'none';
-          wrapper.classList.toggle('mln-focused', focused);
-        },
-      });
-
-      // 定位到当前节点按钮
+    if (currentNodeId && knownIds.has(currentNodeId)) {
       locateBtn = wrapper.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前节点' });
-      locateBtn.style.display = currentNodeId && knownIds.has(currentNodeId) ? '' : 'none';
       locateBtn.addEventListener('click', () => {
         const cid = getCurrentNode(sourcePath);
-        if (cid && knownIds.has(cid)) controller?.focus(cid);
+        if (!cid) return;
+        const targetG = nodeEls.find((g) => idOf.get(g) === cid);
+        if (targetG && panZoom) panZoom.focusElement(targetG);
       });
-
-      if (this.settings.dblclickFocus) {
-        resetBtn = wrapper.createDiv({ cls: 'mln-reset-btn', text: '↩ 返回全图' });
-        resetBtn.style.display = 'none';
-        resetBtn.addEventListener('click', () => controller?.restore());
-
-        // 双击空白区域复位；Esc 复位
-        svg.addEventListener('dblclick', (ev) => {
-          if (svg.dataset.mlnPan === '1') return; // 拖动结束后的误触发
-          if (!(ev.target as Element | null)?.closest('g.node')) controller?.restore();
-        });
-        wrapper.tabIndex = -1;
-        wrapper.addEventListener('keydown', (ev) => {
-          if (ev.key === 'Escape') controller?.restore();
-        });
-      }
     }
 
     nodeEls.forEach((g) => {
       const nodeId = idOf.get(g);
       const link = nodeId ? links.get(nodeId) : undefined;
       g.style.userSelect = 'none';
-
-      // 当前选中节点高亮
-      if (nodeId && nodeId === currentNodeId) {
-        g.classList.add('mln-current-node');
-      }
 
       /* ---- 单击跳转 ---- */
       if (nodeId && link) {
@@ -786,20 +746,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
             );
           }
         });
-      } else if (nodeId && this.settings.dblclickFocus && this.settings.showTooltip) {
+      } else if (nodeId && this.settings.showTooltip) {
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-        title.textContent = '双击：聚焦此分支，再双击返回全图';
+        title.textContent = link?.target ?? nodeId;
         g.appendChild(title);
-      }
-
-      /* ---- 双击聚焦 ---- */
-      if (controller && nodeId) {
-        g.addEventListener('dblclick', (ev) => {
-          if (svg?.dataset.mlnPan === '1') return; // 拖动结束后的误触发
-          ev.preventDefault();
-          ev.stopPropagation();
-          controller!.toggle(nodeId);
-        });
       }
     });
   }
