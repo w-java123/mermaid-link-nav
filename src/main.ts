@@ -39,6 +39,8 @@ interface MermaidLinkNavSettings {
   hoverHighlight: boolean;
   /** 点击不存在的链接时，自动创建笔记的目标文件夹（留空=Obsidian 默认位置） */
   newNoteFolder: string;
+  /** 导出 SVG/PNG 的存放文件夹（留空=使用当前笔记名作为文件夹名） */
+  exportFolder: string;
 }
 
 const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
@@ -49,6 +51,7 @@ const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
   showTooltip: true,
   hoverHighlight: true,
   newNoteFolder: '',
+  exportFolder: '',
 };
 
 let renderSeq = 0;
@@ -673,15 +676,39 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     // ---- 导出整张完整图（非当前缩放视口） ----
     const fileNameBase = (sourcePath.split('/').pop() || 'mermaid-diagram').replace(/\.(md|markdown)$/i, '');
-    const downloadBlob = (blob: Blob, filename: string) => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // 导出目标文件夹：默认「笔记名+格式」命名（如：找工作流程的PNG图片），可在设置中更改
+    const getExportFolder = async (kind: 'svg' | 'png'): Promise<string> => {
+      let folder = (this.settings.exportFolder || '').trim().replace(/^\/+|\/+$/g, '');
+      if (!folder) {
+        const active = this.app.workspace.getActiveFile();
+        const base = active ? active.basename : 'Mermaid导图';
+        folder = `${base}的${kind === 'png' ? 'PNG' : 'SVG'}图片`;
+      }
+      const existing = this.app.vault.getAbstractFileByPath(folder);
+      if (!(existing instanceof TFolder)) {
+        try {
+          await this.app.vault.createFolder(folder);
+        } catch {
+          // 文件夹已存在等情况，忽略
+        }
+      }
+      return folder;
+    };
+    /** 写入 vault，同名文件自动加序号避免覆盖 */
+    const writeToVault = async (name: string, data: ArrayBuffer, kind: 'svg' | 'png'): Promise<string | null> => {
+      const folder = await getExportFolder(kind);
+      const dot = name.lastIndexOf('.');
+      const stem = dot > 0 ? name.slice(0, dot) : name;
+      const ext = dot > 0 ? name.slice(dot) : '';
+      let p = `${folder}/${name}`;
+      for (let i = 1; this.app.vault.getAbstractFileByPath(p); i++) p = `${folder}/${stem}-${i}${ext}`;
+      try {
+        await this.app.vault.createBinary(p, data);
+        return p;
+      } catch (e) {
+        new Notice(`写入失败：${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
     };
     const getFullSvgClone = (): SVGSVGElement | null => {
       if (!svg) return null;
@@ -713,12 +740,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
       clone.querySelectorAll('.mln-current-node').forEach((el) => el.classList.remove('mln-current-node'));
       return clone;
     };
-    const exportSvg = () => {
+    const exportSvg = async () => {
       const clone = getFullSvgClone();
       if (!clone) { new Notice('导出失败：找不到 SVG'); return; }
       const xml = new XMLSerializer().serializeToString(clone);
-      downloadBlob(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }), `${fileNameBase}.svg`);
-      new Notice('SVG 已开始下载');
+      const data = new TextEncoder().encode(xml).buffer as ArrayBuffer;
+      const p = await writeToVault(`${fileNameBase}.svg`, data, 'svg');
+      if (p) new Notice(`SVG 已导出：${p}`);
     };
     const exportPng = async () => {
       const clone = getFullSvgClone();
@@ -755,8 +783,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
         }
         const pngBlob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
         if (!pngBlob) throw new Error('PNG 编码失败');
-        downloadBlob(pngBlob, `${fileNameBase}.png`);
-        new Notice(`PNG 已开始下载（${canvas.width}×${canvas.height}）`);
+        const p = await writeToVault(`${fileNameBase}.png`, await pngBlob.arrayBuffer(), 'png');
+        if (p) new Notice(`PNG 已导出：${p}（${canvas.width}×${canvas.height}）`);
       } catch (e) {
         new Notice(`PNG 导出失败：${e instanceof Error ? e.message : String(e)}`);
       }
@@ -1045,6 +1073,21 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.openMode)
           .onChange(async (v) => {
             this.plugin.settings.openMode = v as OpenMode;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl).setName('导出').setHeading();
+
+    new Setting(containerEl)
+      .setName('导出图片的文件夹')
+      .setDesc('导出 SVG/PNG 的存放位置。留空时自动使用「笔记名+格式」命名文件夹（PNG 导出到“找工作流程的PNG图片”，SVG 导出到“找工作流程的SVG图片”）；也可填写自定义路径，如“导出图片”。')
+      .addText((text) =>
+        text
+          .setPlaceholder('留空 = 使用笔记名作为文件夹')
+          .setValue(this.plugin.settings.exportFolder)
+          .onChange(async (v) => {
+            this.plugin.settings.exportFolder = v.trim().replace(/^\/+|\/+$/g, '');
             await this.plugin.saveSettings();
           }),
       );
