@@ -3,6 +3,7 @@
  * 所有操作基于原始源码（含 [[wikilink]]），返回新源码。
  */
 import type { App } from 'obsidian';
+import { MarkdownView } from 'obsidian';
 import { parseDiagram } from './parser';
 
 /** 支持的节点形状 */
@@ -489,6 +490,12 @@ export async function updateNoteSource(
   const file = app.vault.getFileByPath(sourcePath);
   if (!file) return false;
 
+  // 记录当前页面滚动位置，写回后恢复（避免编辑后页面跳动）
+  const view = app.workspace.getActiveViewOfType(MarkdownView);
+  const scrollEl = view?.contentEl;
+  const scrollTop = scrollEl?.scrollTop ?? 0;
+  const scrollLeft = scrollEl?.scrollLeft ?? 0;
+
   const content = await app.vault.read(file);
   const normContent = content.replace(/\r\n/g, '\n');
   const oldNorm = oldSource.replace(/\r\n/g, '\n').trim();
@@ -528,11 +535,26 @@ export async function updateNoteSource(
     });
     if (replaced) {
       await app.vault.modify(file, newContent2);
+      restoreScroll(scrollEl, scrollTop, scrollLeft);
       return true;
     }
   }
 
   if (!replaced) return false;
   await app.vault.modify(file, newContent);
+  restoreScroll(scrollEl, scrollTop, scrollLeft);
   return true;
+}
+
+/** 延迟恢复页面滚动位置（等 Obsidian 重新渲染完成） */
+function restoreScroll(scrollEl: HTMLElement | undefined, top: number, left: number): void {
+  if (!scrollEl) return;
+  const tryRestore = (delay: number) => {
+    setTimeout(() => {
+      scrollEl.scrollTop = top;
+      scrollEl.scrollLeft = left;
+    }, delay);
+  };
+  tryRestore(30);
+  tryRestore(150); // 二次恢复，应对渲染较慢的情况
 }
