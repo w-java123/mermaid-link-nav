@@ -329,36 +329,53 @@ export function setParent(source: string, nodeId: string, parentId: string): str
 /** 删除指定节点及其所有相关连线 */
 export function deleteNode(source: string, nodeId: string): string {
   const parsed = parseDiagram(source);
-  const node = parsed.nodes.find((n) => n.id === nodeId);
-  if (!node) return source;
+  if (!parsed.nodes.find((n) => n.id === nodeId)) return source;
 
-  // 1. 删除节点定义（连同该行的缩进和换行，避免残留空行）
-  let lineStart = node.start;
-  while (lineStart > 0 && source[lineStart - 1] !== '\n') lineStart--;
-  let lineEnd = node.end;
-  while (lineEnd < source.length && source[lineEnd] !== '\n') lineEnd++;
-  if (lineEnd < source.length) lineEnd++; // 包含换行符
-  let result = source.slice(0, lineStart) + source.slice(lineEnd);
+  const idEsc = nodeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const lines = source.split('\n');
+  const result: string[] = [];
 
-  // 2. 删除所有包含该节点的边（按行处理）
-  const lines = result.split('\n');
-  const filtered = lines.filter((line) => {
-    // 跳过注释和指令行
-    if (/^\s*(%%|graph|flowchart|classDef|class|style|subgraph|end|direction)/.test(line)) return true;
-    // 该行是否包含该节点 ID 且是边的一部分（ID 前后是非单词字符或行首行尾）
-    const idRe = new RegExp(`(^|[^\\w])${nodeId}([^\\w]|$)`);
-    if (idRe.test(line)) {
-      // 如果这行只有节点定义（没有箭头），可能是节点定义已被删，残留空行也去掉
-      if (/-->|---|==>|-.-/.test(line)) {
-        return false; // 是连线，删除整行
-      }
-      // 非连线行（可能是孤立节点定义残留），也删除
-      return false;
+  for (const rawLine of lines) {
+    const [prefix, line] = splitDirPrefix(rawLine);
+    if (/^\s*(%%|graph|flowchart|classDef|class|style|subgraph|end|direction|linkStyle)/.test(line)) {
+      result.push(rawLine);
+      continue;
     }
-    return true;
-  });
+    const idRe = new RegExp(`(^|[^\\w-])${idEsc}([^\\w-]|$)`);
+    if (!idRe.test(line)) {
+      result.push(prefix + line);
+      continue;
+    }
 
-  return filtered.join('\n').replace(/\n{3,}/g, '\n\n');
+    let modified = line;
+    // 1. 链式边：X -->|标签? B(定义) --> Y → X --> Y
+    modified = modified.replace(
+      new RegExp(`-->\\s*(?:\\|[^|]*\\|\\s*)?${idEsc}[^\\n]*?-->`, 'g'),
+      '-->',
+    );
+    // 2. 入边（B 为目标且无出边同行）：... -->|标签? B(定义) → 删到行尾
+    modified = modified.replace(
+      new RegExp(`\\s*-->\\s*(?:\\|[^|]*\\|\\s*)?${idEsc}.*$`),
+      '',
+    );
+    // 3. 出边（B 为源且无入边同行）：B(定义) --> Y → 删到 --> 后
+    modified = modified.replace(
+      new RegExp(`^\\s*${idEsc}.*?-->\\s*`),
+      '',
+    );
+    // 4. 孤立节点定义
+    modified = modified.replace(
+      new RegExp(`${idEsc}.*$`),
+      '',
+    );
+
+    if (modified.trim()) {
+      result.push(prefix + modified.trimEnd());
+    } else if (prefix) {
+      result.push(prefix.trimEnd());
+    }
+  }
+  return result.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
 /**
