@@ -22,15 +22,6 @@ import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
 const PLUGIN_ID = 'mermaid-link-nav';
 
-/** 简单字符串哈希，用于生成流程图缓存 key */
-function simpleHash(s: string): string {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  }
-  return h.toString(36);
-}
-
 type ThemeMode = 'auto' | 'default' | 'dark' | 'forest' | 'neutral';
 type OpenMode = 'active' | 'tab' | 'split';
 
@@ -80,6 +71,8 @@ let renderSeq = 0;
 
 export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
+  /** 每个笔记的代码块计数器，用于生成稳定的 cacheKey */
+  private blockCounters = new Map<string, { index: number; time: number }>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -160,7 +153,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     for (const lang of languages) {
       this.registerMarkdownCodeBlockProcessor(lang, (source, el, ctx) => {
-        void this.renderBlock(source, el, ctx);
+        const key = ctx.sourcePath;
+        const now = Date.now();
+        const prev = this.blockCounters.get(key);
+        // 超过 2 秒视为新的渲染会话，重置计数器
+        const idx = (!prev || now - prev.time > 2000) ? 1 : prev.index + 1;
+        this.blockCounters.set(key, { index: idx, time: now });
+        void this.renderBlock(source, el, ctx, idx);
       });
     }
   }
@@ -175,6 +174,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     source: string,
     el: HTMLElement,
     ctx: MarkdownPostProcessorContext,
+    blockIndex: number,
   ): Promise<void> {
     el.empty();
     const wrapper = el.createDiv({ cls: 'mermaid-link-wrapper' });
@@ -196,7 +196,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
       wrapper.innerHTML = result.svg;
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
-      this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source);
+      this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source, blockIndex);
     } catch (err) {
       wrapper.empty();
       wrapper.dataset.mlnState = 'error';
@@ -218,6 +218,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     sourcePath: string,
     renderId: string,
     diagramSource: string,
+    blockIndex: number,
   ): void {
     const svg = wrapper.querySelector<SVGSVGElement>('svg');
     const nodeEls = Array.from(wrapper.querySelectorAll<SVGGElement>('g.node'));
@@ -239,7 +240,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     // 画布式平移缩放（滚轮缩放 / 拖动平移 / 触摸板手势）
     if (svg) {
-      const cacheKey = `${sourcePath}:${simpleHash(diagramSource)}`;
+      const cacheKey = `${sourcePath}:block${blockIndex}`;
       new PanZoomController(svg, {}, cacheKey);
     }
 

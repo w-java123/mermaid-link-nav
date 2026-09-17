@@ -28,8 +28,40 @@ interface Box {
   height: number;
 }
 
-/** 按 cacheKey 缓存每个流程图的 viewBox，跳转笔记返回后恢复缩放/平移状态 */
+/** localStorage 中存储 viewBox 缓存的 key */
+const STORAGE_KEY = 'mermaid-link-nav:viewBox-cache';
+
+/** 按 cacheKey 缓存每个流程图的 viewBox，跳转笔记返回/重启后恢复缩放/平移状态 */
 const viewBoxCache = new Map<string, Box>();
+
+/** 从 localStorage 加载缓存 */
+function loadCache(): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw) as Record<string, Box>;
+      for (const [k, v] of Object.entries(data)) {
+        viewBoxCache.set(k, v);
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+/** 保存缓存到 localStorage（防抖） */
+let saveTimer: number | undefined;
+function saveCache(): void {
+  if (saveTimer) window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    try {
+      const data: Record<string, Box> = {};
+      for (const [k, v] of viewBoxCache) data[k] = v;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch { /* ignore */ }
+  }, 300);
+}
+
+// 模块加载时从 localStorage 恢复
+loadCache();
 
 export class PanZoomController {
   private svg: SVGSVGElement;
@@ -78,6 +110,7 @@ export class PanZoomController {
         const b = this.readBox();
         this.current = b;
         viewBoxCache.set(cacheKey, { ...b });
+        saveCache();
       });
       this.observer.observe(svg, { attributes: true, attributeFilter: ['viewBox'] });
     }
@@ -92,7 +125,10 @@ export class PanZoomController {
   private writeBox(b: Box): void {
     this.svg.setAttribute('viewBox', `${b.x} ${b.y} ${b.width} ${b.height}`);
     this.current = b;
-    if (this.cacheKey) viewBoxCache.set(this.cacheKey, { ...b });
+    if (this.cacheKey) {
+      viewBoxCache.set(this.cacheKey, { ...b });
+      saveCache();
+    }
   }
 
   /** 从 SVG 同步当前 viewBox（聚焦动画可能已修改它） */
