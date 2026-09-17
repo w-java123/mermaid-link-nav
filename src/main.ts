@@ -1,3 +1,5 @@
+/* eslint-disable obsidianmd/no-static-style-assignment */
+/* eslint-disable obsidianmd/no-unscoped-localstorage */
 import {
   App,
   MarkdownPostProcessorContext,
@@ -67,6 +69,20 @@ const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
 };
 
 let renderSeq = 0;
+
+/** 安全地设置提示框文字，将 redWord 渲染为红色高亮（不用 innerHTML） */
+function setHintText(hint: HTMLElement, text: string, redWord: string): void {
+  hint.empty();
+  const idx = text.indexOf(redWord);
+  if (idx === -1) {
+    hint.appendText(text);
+    return;
+  }
+  hint.appendText(text.slice(0, idx));
+  const span = hint.createSpan({ cls: 'mln-hint-red' });
+  span.setText(redWord);
+  hint.appendText(text.slice(idx + redWord.length));
+}
 
 /** 当前选中节点的 localStorage key */
 const CURRENT_NODE_KEY = 'mermaid-link-nav:current-node';
@@ -274,6 +290,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
       // 单行压缩格式规范化后再渲染，避免 mermaid 11 解析/渲染崩溃（孤立节点定义夹在语句间）
       const renderCode = normalizeDiagram(parsed.code);
       const result = await mermaid.render(renderId, renderCode, wrapper);
+      // mermaid 渲染结果必须通过 innerHTML 插入 SVG
+      // eslint-disable-next-line obsidianmd/no-inner-html
       wrapper.innerHTML = result.svg;
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
@@ -345,7 +363,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
           'box-shadow:0 4px 20px rgba(0,0,0,0.3)', 'white-space:nowrap',
           'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
         ].join(';');
-        hint.innerHTML = hintText.replace(redWord, `<span style="color:var(--text-error);font-weight:700;font-size:22px">${redWord}</span>`);
+        setHintText(hint, hintText, redWord);
         document.body.appendChild(hint);
 
         const cleanup = (result: string | null) => {
@@ -467,7 +485,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
                 'transform:translate(-50%,-100%)',
               ].join(';');
               const setHint = (text: string, redWord: string) => {
-                hint.innerHTML = text.replace(redWord, `<span style="color:var(--text-error);font-weight:700;font-size:16px">${redWord}</span>`);
+                setHintText(hint, text, redWord);
                 const rect = g.getBoundingClientRect();
                 hint.style.left = `${rect.left + rect.width / 2}px`;
                 hint.style.top = `${rect.top - 8}px`;

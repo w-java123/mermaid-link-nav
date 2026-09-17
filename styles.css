@@ -53,6 +53,13 @@
   opacity: 1;
 }
 
+/* 选择节点提示中的红色高亮关键字 */
+.mln-hint-red {
+  color: var(--text-error);
+  font-weight: 700;
+  font-size: 1.15em;
+}
+
 .mermaid-link-wrapper[data-mln-state='loading'] {
   color: var(--text-muted);
   font-size: var(--font-ui-small);
