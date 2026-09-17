@@ -1,6 +1,6 @@
 ﻿{
   "name": "obsidian-mermaid-link-nav",
-  "version": "1.14.4",
+  "version": "1.14.5",
   "description": "Obsidian plugin: render Mermaid diagrams with clickable wikilink nodes.",
   "main": "main.js",
   "scripts": {

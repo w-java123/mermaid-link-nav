@@ -15,9 +15,9 @@ import mermaid from 'mermaid';
 import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
-import { normalizeLabel, parseDiagram, type FlowEdge, type NodeInfo, type NodeLink } from './parser';
+import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
 import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, updateNoteSource } from './diagram-edit';
-import { NodeEditModal, NodeEditResult, NodeSelectModal } from './edit-modal';
+import { NodeEditModal, NodeEditResult } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
 const PLUGIN_ID = 'mermaid-link-nav';
@@ -29,19 +29,6 @@ function simpleHash(s: string): string {
     h = ((h << 5) - h + s.charCodeAt(i)) | 0;
   }
   return h.toString(36);
-}
-
-/** 从节点位置提取纯文本标签（去掉 [[wikilink]] 语法，保留显示名/别名） */
-function extractNodeLabel(source: string, node: NodeInfo): string {
-  const raw = source.slice(node.labelStart, node.labelEnd);
-  return raw
-    .replace(/\[\[([^\]|#]*)(#[^\]|]*)?(?:\|([^\]]*))?\]\]/g, (_, path, hash, alias) => {
-      if (alias) return alias;
-      const p = (path || '').trim();
-      const parts = p.split('/');
-      return (parts[parts.length - 1] || p) + (hash || '');
-    })
-    .trim();
 }
 
 type ThemeMode = 'auto' | 'default' | 'dark' | 'forest' | 'neutral';
@@ -307,31 +294,31 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
           // 添加父节点（替换原有父节点：删除入边，建立 选中 --> 当前）
           menu.addItem((item) =>
-            item.setTitle('添加父节点').onClick(() => {
-              const parsed = parseDiagram(diagramSource);
-              const nodeOptions = parsed.nodes
-                .filter((n) => n.id !== nodeId)
-                .map((n) => ({ id: n.id, label: extractNodeLabel(diagramSource, n) }));
-              new NodeSelectModal(this.app, nodeOptions, async (selectedId) => {
-                const newSource = setParent(diagramSource, nodeId, selectedId);
-                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-                if (!ok) new Notice('添加父节点失败');
-              }).open();
+            item.setTitle('添加父节点').onClick(async () => {
+              const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
+              const selectedId = await pickNode(
+                `请点击选择要添加为【父】节点的节点（当前节点：${curLabel}，Esc 取消）`,
+                '【父】', nodeId,
+              );
+              if (!selectedId) return;
+              const newSource = setParent(diagramSource, nodeId, selectedId);
+              const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+              if (!ok) new Notice('添加父节点失败');
             }),
           );
 
           // 添加子节点（选择已存在节点，建立 当前 --> 选中 的连线）
           menu.addItem((item) =>
-            item.setTitle('添加子节点').onClick(() => {
-              const parsed = parseDiagram(diagramSource);
-              const nodeOptions = parsed.nodes
-                .filter((n) => n.id !== nodeId)
-                .map((n) => ({ id: n.id, label: extractNodeLabel(diagramSource, n) }));
-              new NodeSelectModal(this.app, nodeOptions, async (selectedId) => {
-                const newSource = addEdge(diagramSource, nodeId, selectedId);
-                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-                if (!ok) new Notice('添加子节点失败');
-              }).open();
+            item.setTitle('添加子节点').onClick(async () => {
+              const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
+              const selectedId = await pickNode(
+                `请点击选择要添加为【子】节点的节点（当前节点：${curLabel}，Esc 取消）`,
+                '【子】', nodeId,
+              );
+              if (!selectedId) return;
+              const newSource = addEdge(diagramSource, nodeId, selectedId);
+              const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+              if (!ok) new Notice('添加子节点失败');
             }),
           );
 
