@@ -294,7 +294,9 @@ export class PanZoomController {
         if (this.pinchDist > 0 && dist > 0) {
           const cx = (p1.x + p2.x) / 2;
           const cy = (p1.y + p2.y) / 2;
-          this.zoomAt(cx, cy, dist / this.pinchDist);
+          // zoomAt: factor < 1 => viewBox narrows => zoom IN.
+          // Spreading fingers (dist > pinchDist) must zoom in: factor = pinchDist / dist
+          this.zoomAt(cx, cy, this.pinchDist / dist);
         }
         this.pinchDist = dist;
         return;
