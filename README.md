@@ -1,3 +1,13 @@
+# Mermaid Link Navigator (Obsidian Plugin)
+
+**Mermaid Link Navigator** is an [Obsidian](https://obsidian.md) plugin that renders Mermaid flowcharts with **clickable [[wikilink]] nodes**. Ctrl/⌘+click a node to jump to its linked note. It also provides right-click visual editing of the flowchart (add / edit / delete nodes, change shapes, decision nodes with yes/no branches, parent-child links), canvas-style zoom and pan, a current-node locator, and automatic link synchronization when notes are renamed.
+
+**Features**: node-embedded [[note links]] · Ctrl/⌘+click navigation (plain click does not jump) · right-click visual editing that writes back to the note source · decision nodes (diamond) with yes-left / no-right layout · node shapes: rectangle / rounded / circle / diamond / hexagon / cylinder / double-border · canvas zoom & pan with auto-saved view state · dashed border when the target note does not exist (auto-create with configurable folder) · auto-sync links on note rename · outline-to-flowchart view · built-in Mermaid 11 (works offline) · desktop & mobile support.
+
+**Install**: search **Mermaid Link Navigator** in Obsidian → Settings → Third-party plugins → Browse. Manual install: put `main.js`, `manifest.json`, `styles.css` from the latest release into `.obsidian/plugins/mermaid-link-nav/`.
+
+---
+
 # Mermaid Link Navigator（Obsidian 插件）
 
 在 Mermaid 流程图的**节点里直接写 `[[笔记链接]]`**，阅读模式下 Ctrl/⌘+单击节点即可跳转到对应笔记。支持右键可视化编辑流程图、画布式缩放平移、当前节点一键定位。
