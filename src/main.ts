@@ -71,8 +71,6 @@ let renderSeq = 0;
 
 export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
-  /** 每个渲染会话的代码块计数器，docId -> 当前索引 */
-  private blockCounters = new Map<string, number>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -161,11 +159,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     for (const lang of languages) {
       this.registerMarkdownCodeBlockProcessor(lang, (source, el, ctx) => {
-        // 用 docId 区分渲染会话，同一会话内代码块按顺序编号，每次渲染都从 1 开始
-        const docId = (ctx as unknown as { docId?: string }).docId ?? ctx.sourcePath;
-        const idx = (this.blockCounters.get(docId) ?? 0) + 1;
-        this.blockCounters.set(docId, idx);
-        void this.renderBlock(source, el, ctx, idx);
+        void this.renderBlock(source, el, ctx);
       });
     }
   }
@@ -238,7 +232,6 @@ export default class MermaidLinkNavPlugin extends Plugin {
     source: string,
     el: HTMLElement,
     ctx: MarkdownPostProcessorContext,
-    blockIndex: number,
   ): Promise<void> {
     el.empty();
     const wrapper = el.createDiv({ cls: 'mermaid-link-wrapper' });
@@ -260,7 +253,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
       wrapper.innerHTML = result.svg;
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
-      this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source, blockIndex);
+      this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source);
     } catch (err) {
       wrapper.empty();
       wrapper.dataset.mlnState = 'error';
@@ -282,7 +275,6 @@ export default class MermaidLinkNavPlugin extends Plugin {
     sourcePath: string,
     renderId: string,
     diagramSource: string,
-    blockIndex: number,
   ): void {
     const svg = wrapper.querySelector<SVGSVGElement>('svg');
     const nodeEls = Array.from(wrapper.querySelectorAll<SVGGElement>('g.node'));
@@ -304,7 +296,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     // 画布式平移缩放（滚轮缩放 / 拖动平移 / 触摸板手势）
     if (svg) {
-      const cacheKey = `${sourcePath}:block${blockIndex}`;
+      // 用笔记路径作为稳定 cacheKey，编辑节点/跳转返回后重新渲染仍能恢复视图状态
+      const cacheKey = sourcePath;
       new PanZoomController(svg, {}, cacheKey);
     }
 
