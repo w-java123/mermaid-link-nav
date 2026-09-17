@@ -1,3 +1,4 @@
+/* eslint-disable obsidianmd/no-unscoped-localstorage */
 /**
  * 画布式平移与缩放控制器。
  *

@@ -1,3 +1,4 @@
+/* eslint-disable obsidianmd/no-static-style-assignment */
 /**
  * 流程图视图：把当前笔记大纲用 mermaid 渲染成 flowchart。
  * 单击节点跳转到笔记对应行（Ctrl/Cmd 新标签、Alt 分屏），双击节点聚焦分支。
@@ -184,6 +185,8 @@ export class OutlineFlowView extends ItemView {
         document.getElementById(`d${renderId}`)?.remove();
         return;
       }
+      // mermaid 渲染结果必须通过 innerHTML 插入 SVG
+      // eslint-disable-next-line obsidianmd/no-inner-html
       wrapper.innerHTML = result.svg;
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;

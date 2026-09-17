@@ -1,3 +1,4 @@
+/* eslint-disable obsidianmd/no-static-style-assignment */
 /**
  * 聚焦控制器：在渲染好的 mermaid SVG 上做
  * 「隐藏无关节点/边 + viewBox 平滑放大」与「全部恢复 + 缩回全图」。
