@@ -11,10 +11,34 @@
   -webkit-user-select: none;
 }
 
-/* 定位到当前节点按钮（放在图上方） */
+/* 当前节点按钮栏（选择 + 定位，同一行） */
+.mln-btn-bar {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 8px 0;
+}
+
+.mln-select-btn {
+  display: inline-block;
+  padding: 4px 14px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  opacity: 0.92;
+}
+
+.mln-select-btn:hover {
+  opacity: 1;
+  border-color: var(--interactive-accent);
+}
+
+/* 定位到当前节点按钮 */
 .mln-locate-btn {
   display: inline-block;
-  margin: 4px 0 8px 0;
   padding: 4px 14px;
   font-size: var(--font-ui-smaller);
   color: var(--text-on-accent);
