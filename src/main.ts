@@ -634,7 +634,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     // 当前节点按钮区域（选择当前节点 + 定位当前节点，同一行）
     const btnBar = wrapper.createDiv({ cls: 'mln-btn-bar' });
-    const selectBtn = btnBar.createDiv({ cls: 'mln-select-btn', text: currentNodeId ? '重新选择当前节点' : '选择当前节点' });
+    const selectBtn = btnBar.createDiv({ cls: 'mln-select-btn', text: currentNodeId ? '重新选择当前正在执行的节点' : '选择当前正在执行的节点' });
     let locateBtn: HTMLDivElement | null = null;
     if (currentNodeId && knownIds.has(currentNodeId)) {
       locateBtn = btnBar.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前节点' });
@@ -668,7 +668,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
         setCurrentNode(sourcePath, targetId);
         cleanup();
         // 更新按钮状态
-        selectBtn.setText('重新选择当前节点');
+        selectBtn.setText('重新选择当前正在执行的节点');
         if (!locateBtn) {
           locateBtn = btnBar.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前节点' });
           locateBtn.addEventListener('click', () => {
