@@ -685,6 +685,87 @@ export default class MermaidLinkNavPlugin extends Plugin {
     // 当前节点按钮区域（选择当前节点 + 定位当前节点，同一行）
     const btnBar = wrapper.createDiv({ cls: 'mln-btn-bar' });
     // 按钮栏为 fixed 悬浮层（随屏幕滚动），append 即可，位置由 CSS 控制
+
+    // ---- 导出整张完整图（非当前缩放视口） ----
+    const fileNameBase = (sourcePath.split('/').pop() || 'mermaid-diagram').replace(/\.(md|markdown)$/i, '');
+    const downloadBlob = (blob: Blob, filename: string) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    const getFullSvgClone = (): SVGSVGElement | null => {
+      if (!svg) return null;
+      const base = panZoom?.getBaseSize();
+      if (!base || !base.width || !base.height) return null;
+      const clone = svg.cloneNode(true) as SVGSVGElement;
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('viewBox', `0 0 ${base.width} ${base.height}`);
+      clone.setAttribute('width', String(base.width));
+      clone.setAttribute('height', String(base.height));
+      // 当前节点高亮是 CSS 类，脱离页面后失效，内联为 SVG 属性保留
+      const q = '.mln-current-node rect, .mln-current-node path, .mln-current-node circle, .mln-current-node polygon, .mln-current-node ellipse';
+      const origShapes = svg.querySelectorAll<SVGElement>(q);
+      const cloneShapes = clone.querySelectorAll<SVGElement>(q);
+      origShapes.forEach((el, i) => {
+        const ce = cloneShapes[i];
+        if (!ce) return;
+        const s = getComputedStyle(el);
+        ce.setAttribute('fill', s.fill);
+        ce.setAttribute('stroke', s.stroke);
+        ce.setAttribute('stroke-width', s.strokeWidth);
+      });
+      return clone;
+    };
+    const exportSvg = () => {
+      const clone = getFullSvgClone();
+      if (!clone) { new Notice('导出失败：找不到 SVG'); return; }
+      const xml = new XMLSerializer().serializeToString(clone);
+      downloadBlob(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }), `${fileNameBase}.svg`);
+      new Notice('SVG 已开始下载');
+    };
+    const exportPng = async () => {
+      const clone = getFullSvgClone();
+      const base = panZoom?.getBaseSize();
+      if (!clone || !base) { new Notice('导出失败：找不到 SVG'); return; }
+      new Notice('正在导出 PNG…');
+      const xml = new XMLSerializer().serializeToString(clone);
+      const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }));
+      try {
+        const img = new Image();
+        await new Promise<void>((res, rej) => {
+          img.onload = () => res();
+          img.onerror = () => rej(new Error('SVG 图片加载失败'));
+          img.src = url;
+        });
+        // 2 倍高清；超大图自动降级避免 canvas 尺寸上限（16384 边）
+        const maxEdge = Math.max(base.width, base.height);
+        const scale = Math.min(2, 16384 / maxEdge);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(base.width * scale));
+        canvas.height = Math.max(1, Math.round(base.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('无法创建画布');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const pngBlob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
+        if (!pngBlob) throw new Error('PNG 编码失败');
+        downloadBlob(pngBlob, `${fileNameBase}.png`);
+        new Notice(`PNG 已开始下载（${canvas.width}×${canvas.height}）`);
+      } catch (e) {
+        new Notice(`PNG 导出失败：${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    const exportSvgBtn = btnBar.createDiv({ cls: 'mln-export-btn', text: '💾导出SVG' });
+    exportSvgBtn.addEventListener('click', exportSvg);
+    const exportPngBtn = btnBar.createDiv({ cls: 'mln-export-btn', text: '🖼️导出PNG' });
+    exportPngBtn.addEventListener('click', exportPng);
+
     const selectBtn = btnBar.createDiv({ cls: 'mln-select-btn', text: currentNodeId ? '重新选择当前正在执行的节点' : '选择当前正在执行的节点' });
     let locateBtn: HTMLDivElement | null = null;
     let clearBtn: HTMLDivElement | null = null;

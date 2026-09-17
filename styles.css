@@ -65,6 +65,23 @@
   border-color: var(--text-muted);
 }
 
+/* 导出图片按钮 */
+.mln-export-btn {
+  display: inline-block;
+  padding: 4px 14px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+.mln-export-btn:hover {
+  opacity: 0.9;
+  border-color: var(--text-muted);
+}
+
 /* 定位到当前节点按钮 */
 .mln-locate-btn {
   display: inline-block;

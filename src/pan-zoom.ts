@@ -134,6 +134,11 @@ export class PanZoomController {
     }
   }
 
+  /** 完整图尺寸（导出整张图片用） */
+  getBaseSize(): { width: number; height: number } {
+    return { width: this.baseW, height: this.baseH };
+  }
+
   /** 从 SVG 同步当前 viewBox（聚焦动画可能已修改它） */
   sync(): void {
     this.current = this.readBox();
