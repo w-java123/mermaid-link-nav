@@ -710,24 +710,22 @@ export default class MermaidLinkNavPlugin extends Plugin {
       // 导出文件显示时居中
       clone.setAttribute('style', 'display:block;margin:0 auto;max-width:100%;height:auto;');
       // 移除可能引入外部资源（污染 canvas）的引用，保证 PNG 可导出
-      clone.querySelectorAll('image, foreignObject').forEach((el) => el.remove());
+      // mermaid 节点文字在 <foreignObject> 里，必须保留；只移除可能加载外部资源的 <image>
+      clone.querySelectorAll('image').forEach((el) => el.remove());
       clone.querySelectorAll('style').forEach((st) => {
         st.textContent = (st.textContent ?? '')
           .replace(/@import[^;]+;/gi, '')
           .replace(/url\(\s*(?!#)[^)]*\)/gi, 'url(#none)');
       });
-      // 当前节点高亮是 CSS 类，脱离页面后失效，内联为 SVG 属性保留
-      const q = '.mln-current-node rect, .mln-current-node path, .mln-current-node circle, .mln-current-node polygon, .mln-current-node ellipse';
-      const origShapes = svg.querySelectorAll<SVGElement>(q);
-      const cloneShapes = clone.querySelectorAll<SVGElement>(q);
-      origShapes.forEach((el, i) => {
-        const ce = cloneShapes[i];
-        if (!ce) return;
-        const s = getComputedStyle(el);
-        ce.setAttribute('fill', s.fill);
-        ce.setAttribute('stroke', s.stroke);
-        ce.setAttribute('stroke-width', s.strokeWidth);
+      // 导出不保留"当前节点"红色高亮：恢复原样式、移除高亮类，所有节点格式一致
+      clone.querySelectorAll<SVGElement>('.mln-current-node rect, .mln-current-node path, .mln-current-node circle, .mln-current-node polygon, .mln-current-node ellipse').forEach((shape) => {
+        shape.style.stroke = shape.dataset.mlnOrigStroke ?? '';
+        shape.style.strokeWidth = '';
+        shape.style.fill = shape.dataset.mlnOrigFill ?? '';
+        delete shape.dataset.mlnOrigStroke;
+        delete shape.dataset.mlnOrigFill;
       });
+      clone.querySelectorAll('.mln-current-node').forEach((el) => el.classList.remove('mln-current-node'));
       return clone;
     };
     const exportSvg = () => {
