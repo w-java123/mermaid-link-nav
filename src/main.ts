@@ -757,11 +757,12 @@ export default class MermaidLinkNavPlugin extends Plugin {
           );
         };
 
-        // 仅 Ctrl/⌘（或 Alt）+ 单击才跳转查看详情，普通左键单击不跳转
+        // 触屏设备（手机/平板）：单击直接跳转查看详情；桌面端：仅 Ctrl/⌘（或 Alt）+ 单击跳转
         g.addEventListener('click', (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          if (ev.ctrlKey || ev.metaKey || ev.altKey) void open(ev);
+          const isTouch = (window.matchMedia?.('(pointer: coarse)').matches ?? false) || ('ontouchstart' in window);
+          if (isTouch || ev.ctrlKey || ev.metaKey || ev.altKey) void open(ev);
         });
         g.addEventListener('auxclick', (ev) => {
           if (ev.button === 1) void open(ev); // 鼠标中键：新标签页
