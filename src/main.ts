@@ -16,7 +16,7 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
-import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, swapNodes, updateNoteSource } from './diagram-edit';
+import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, normalizeDiagram, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, swapNodes, updateNoteSource } from './diagram-edit';
 import { NodeEditModal, NodeEditResult } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
@@ -206,12 +206,12 @@ export default class MermaidLinkNavPlugin extends Plugin {
             const oldEsc = oldLink.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             // 替换 [[oldLink]] 和 [[oldLink|alias]]，保留锚点和别名
             const re = new RegExp(`\\[\\[${oldEsc}(#[^\\]|]*)?(\\|[^\\]]*)?\\]\\]`, 'g');
-            if (re.test(updated)) {
-              modified = true;
-              updated = updated.replace(re, (_m, anchor: string, alias: string) => {
-                return `[[${newLink}${anchor ?? ''}${alias ?? ''}]]`;
-              });
-            }
+            let replacedOnce = false;
+            updated = updated.replace(re, (_m, anchor: string, alias: string) => {
+              replacedOnce = true;
+              return `[[${newLink}${anchor ?? ''}${alias ?? ''}]]`;
+            });
+            if (replacedOnce) modified = true;
           }
           if (!modified) return full;
           const header = full.slice(0, full.indexOf('\n') + 1);
@@ -249,7 +249,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
         flowchart: { htmlLabels: true, useMaxWidth: true, curve: 'basis' },
       });
 
-      const result = await mermaid.render(renderId, parsed.code, wrapper);
+      // 单行压缩格式规范化后再渲染，避免 mermaid 11 解析/渲染崩溃（孤立节点定义夹在语句间）
+      const renderCode = normalizeDiagram(parsed.code);
+      const result = await mermaid.render(renderId, renderCode, wrapper);
       wrapper.innerHTML = result.svg;
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
@@ -405,9 +407,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
                 initialLabel: currentLabel,
                 initialLink: currentLink,
                 onSubmit: async (result) => {
+                  // 链接留空时默认用节点名称（与添加节点一致）
+                  const link = result.link.trim() ? result.link : result.label;
                   const newSource = editNode(diagramSource, nodeId, {
                     label: result.label,
-                    link: result.link || undefined,
+                    link,
                   });
                   const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
                   if (!ok) new Notice('更新笔记失败');

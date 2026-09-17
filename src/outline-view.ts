@@ -8,6 +8,7 @@ import type MermaidLinkNavPlugin from './main';
 import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
+import { normalizeDiagram } from './diagram-edit';
 import { buildOutlineTree, outlineToMermaid, type OutlineNode } from './outline';
 
 export const OUTLINE_VIEW_TYPE = 'mermaid-link-nav-outline-view';
@@ -178,7 +179,7 @@ export class OutlineFlowView extends ItemView {
           padding: 12,
         },
       });
-      const result = await mermaid.render(renderId, diagram.code, wrapper);
+      const result = await mermaid.render(renderId, normalizeDiagram(diagram.code), wrapper);
       if (token !== this.renderToken) {
         document.getElementById(`d${renderId}`)?.remove();
         return;

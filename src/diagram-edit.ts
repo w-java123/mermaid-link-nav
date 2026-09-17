@@ -42,6 +42,61 @@ function generateId(source: string): string {
   return `N${i}`;
 }
 
+/** 链式箭头（节点定义闭合后紧跟，则不断行） */
+const CHAIN_ARROW_RE = /^(-->|---|==>|-\.-|-.->|~~~)/;
+/** 一行内"边目标裸 ID 后跟 2+ 空格再跟新语句"的切分点 */
+const EDGE_STMT_GAP_RE = /(?:-->|---|==>|-\.->|~~~)(?:\|[^|\n]*\|)?[ \t]*[A-Za-z_][\w-]*[ \t]{2,}(?=[A-Za-z_][\w-]*)/g;
+
+/**
+ * 把单行压缩格式的 mermaid 源码规范化为多行格式（每条语句独立一行）。
+ * 单行格式中"孤立节点定义"夹在语句间会导致 mermaid 解析失败/渲染崩溃，
+ * 编辑操作前规范化可保证 mermaid 始终能解析。已是多行格式则原样返回。
+ */
+export function normalizeDiagram(source: string): string {
+  const headMatch = source.match(/^\s*(%%\{.*?\}%%\s*)?(flowchart|graph)\s+\w+\s*/);
+  const head = headMatch ? headMatch[0] : '';
+  const bodyStart = headMatch ? headMatch[0].length : 0;
+  const body = source.slice(bodyStart);
+  // 已含换行（多行格式）直接返回，避免破坏用户格式
+  if (/\n/.test(body)) return source;
+
+  const parsed = parseDiagram(source);
+  if (parsed.nodes.length === 0) return source;
+
+  // 从后往前在"节点定义闭合后且非链式箭头"处插入换行
+  let result = source;
+  const sorted = [...parsed.nodes].sort((a, b) => a.end - b.end);
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const n = sorted[i];
+    if (n.end >= result.length) continue;
+    const rest = result.slice(n.end).replace(/^\s+/, '');
+    if (CHAIN_ARROW_RE.test(rest)) continue;
+    if (rest) {
+      result = result.slice(0, n.end) + '\n' + result.slice(n.end);
+    }
+  }
+
+  // 补充：同一行内"边目标裸 ID 后跟 2+ 空格再跟新语句"处切分（mermaid 11 不接受一行内多语句）
+  result = result.replace(EDGE_STMT_GAP_RE, (m) => m.replace(/[ \t]+$/, '\n'));
+
+  // 头部与语句分行，统一缩进
+  const lines = result.split('\n');
+  const out: string[] = [];
+  const first = lines[0];
+  if (head && first.length > head.length) {
+    out.push(head.replace(/\s+$/, ''));
+    const rest = first.slice(head.length).trim();
+    if (rest) out.push('  ' + rest);
+  } else {
+    out.push(first.trimEnd());
+  }
+  for (let i = 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t) out.push('  ' + t);
+  }
+  return out.join('\n') + '\n';
+}
+
 /** 构建节点标签文本：有链接则 "[[link|label]]"，否则 "label" */
 function buildLabel(label: string, link?: string): string {
   const clean = label.trim();
@@ -53,6 +108,7 @@ function buildLabel(label: string, link?: string): string {
 
 /** 删除指定的 from --> to 边（含带标签边），保留两端节点定义，用分号分隔 */
 export function removeEdge(source: string, fromId: string, toId: string): string {
+  source = normalizeDiagram(source);
   const fromEsc = fromId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const toEsc = toId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // 匹配 from(可选节点定义) --> (可选标签) to，逐行处理
@@ -81,6 +137,7 @@ export function removeEdge(source: string, fromId: string, toId: string): string
 
 /** 交换两个节点的定义内容（标签+形状），ID 不变，相当于互换位置 */
 export function swapNodes(source: string, idA: string, idB: string): string {
+  source = normalizeDiagram(source);
   const parsed = parseDiagram(source);
   const nodeA = parsed.nodes.find((n) => n.id === idA);
   const nodeB = parsed.nodes.find((n) => n.id === idB);
@@ -105,6 +162,7 @@ export function swapNodes(source: string, idA: string, idB: string): string {
 
 /** 在源码末尾追加新节点定义和连线；若同时指定上下游，则删除原上下游直连边，使新节点夹在中间 */
 export function addNode(source: string, opts: AddNodeOptions): { newSource: string; newId: string } {
+  source = normalizeDiagram(source);
   const newId = generateId(source);
   const label = buildLabel(opts.label, opts.link);
   const nodeDef = `${newId}["${label}"]`;
@@ -127,6 +185,7 @@ export function addNode(source: string, opts: AddNodeOptions): { newSource: stri
 
 /** 编辑指定节点的标签和跳转链接，保留原形状 */
 export function editNode(source: string, nodeId: string, opts: EditNodeOptions): string {
+  source = normalizeDiagram(source);
   const parsed = parseDiagram(source);
   const node = parsed.nodes.find((n) => n.id === nodeId);
   if (!node) return source;
@@ -140,6 +199,7 @@ export function editNode(source: string, nodeId: string, opts: EditNodeOptions):
 
 /** 改变节点形状，保留标签内容 */
 export function changeNodeShape(source: string, nodeId: string, shapeType: NodeShapeType): string {
+  source = normalizeDiagram(source);
   const parsed = parseDiagram(source);
   const node = parsed.nodes.find((n) => n.id === nodeId);
   if (!node) return source;
@@ -157,6 +217,7 @@ export function changeNodeShape(source: string, nodeId: string, shapeType: NodeS
 /** 在两个已存在节点之间添加连线（from --> to） */
 export function addEdge(source: string, from: string, to: string): string {
   if (from === to) return source;
+  source = normalizeDiagram(source);
   const edge = `\n${from} --> ${to}`;
   return source.replace(/\s+$/, '') + edge + '\n';
 }
@@ -175,6 +236,7 @@ function splitDirPrefix(line: string): [string, string] {
 
 /** 删除节点的所有入边（X --> nodeId），保留节点定义，链式边自动跳过中间节点 */
 export function removeIncomingEdges(source: string, nodeId: string): string {
+  source = normalizeDiagram(source);
   const lines = source.split('\n');
   const result: string[] = [];
   const inEdgeRe = new RegExp(`-->\\s*${nodeId}(\\s|$|[^\\w-])`);
@@ -215,6 +277,7 @@ export function removeIncomingEdges(source: string, nodeId: string): string {
 
 /** 删除节点的所有出边（nodeId --> X），保留节点定义 */
 export function removeOutgoingEdges(source: string, nodeId: string): string {
+  source = normalizeDiagram(source);
   const lines = source.split('\n');
   const result: string[] = [];
   const selfDefRe = new RegExp(`${nodeId}\\s*(\\[\\[|\\[\\(|\\(\\(|\\{\\{|\\[\\/|\\[\\\\|[\\[\\(\\{>])`);
@@ -259,6 +322,7 @@ export function removeOutgoingEdges(source: string, nodeId: string): string {
 /** 添加带标签的边：from -->|label| to */
 export function addLabeledEdge(source: string, from: string, to: string, label: string): string {
   if (from === to) return source;
+  source = normalizeDiagram(source);
   const edge = `\n${from} -->|${label}| ${to}`;
   return source.replace(/\s+$/, '') + edge + '\n';
 }
@@ -270,6 +334,7 @@ export function setAsDecision(
   yesTarget: string,
   noTarget: string,
 ): string {
+  source = normalizeDiagram(source);
   let result = changeNodeShape(source, nodeId, 'diamond');
   result = removeOutgoingEdges(result, nodeId);
 
@@ -321,6 +386,7 @@ export function setAsDecision(
 /** 替换节点的父节点：删除原有入边，建立 parentId --> nodeId */
 export function setParent(source: string, nodeId: string, parentId: string): string {
   if (nodeId === parentId) return source;
+  source = normalizeDiagram(source);
   let result = removeIncomingEdges(source, nodeId);
   result = addEdge(result, parentId, nodeId);
   return result;
@@ -328,6 +394,7 @@ export function setParent(source: string, nodeId: string, parentId: string): str
 
 /** 删除指定节点及其所有相关连线 */
 export function deleteNode(source: string, nodeId: string): string {
+  source = normalizeDiagram(source);
   const parsed = parseDiagram(source);
   const hasNode = parsed.nodes.some((n) => n.id === nodeId)
     || parsed.edges.some((e) => e.from === nodeId || e.to === nodeId);
