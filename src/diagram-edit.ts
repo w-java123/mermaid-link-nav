@@ -57,42 +57,44 @@ export function normalizeDiagram(source: string): string {
   const head = headMatch ? headMatch[0] : '';
   const bodyStart = headMatch ? headMatch[0].length : 0;
   const body = source.slice(bodyStart);
-  // 已含换行（多行格式）直接返回，避免破坏用户格式
-  if (/\n/.test(body)) return source;
+  const isMultiLine = /\n/.test(body);
 
-  const parsed = parseDiagram(source);
-  if (parsed.nodes.length === 0) return source;
-
-  // 从后往前在"节点定义闭合后且非链式箭头"处插入换行
   let result = source;
-  const sorted = [...parsed.nodes].sort((a, b) => a.end - b.end);
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    const n = sorted[i];
-    if (n.end >= result.length) continue;
-    const rest = result.slice(n.end).replace(/^\s+/, '');
-    if (CHAIN_ARROW_RE.test(rest)) continue;
-    if (rest) {
-      result = result.slice(0, n.end) + '\n' + result.slice(n.end);
+
+  if (!isMultiLine) {
+    // 单行格式：切分语句为多行
+    const parsed = parseDiagram(source);
+    if (parsed.nodes.length === 0) return source;
+
+    // 从后往前在"节点定义闭合后且非链式箭头"处插入换行
+    const sorted = [...parsed.nodes].sort((a, b) => a.end - b.end);
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const n = sorted[i];
+      if (n.end >= result.length) continue;
+      const rest = result.slice(n.end).replace(/^\s+/, '');
+      if (CHAIN_ARROW_RE.test(rest)) continue;
+      if (rest) {
+        result = result.slice(0, n.end) + '\n' + result.slice(n.end);
+      }
     }
+    // 补充：同一行内"边目标裸 ID 后跟 2+ 空格再跟新语句"处切分
+    result = result.replace(EDGE_STMT_GAP_RE, (m) => m.replace(/[ \t]+$/, '\n'));
   }
 
-  // 补充：同一行内"边目标裸 ID 后跟 2+ 空格再跟新语句"处切分（mermaid 11 不接受一行内多语句）
-  result = result.replace(EDGE_STMT_GAP_RE, (m) => m.replace(/[ \t]+$/, '\n'));
-
-  // 头部与语句分行，统一缩进
+  // 统一缩进：头部行（%%{init}%%、flowchart TD）不缩进，语句行 2 空格，空行保留
+  // 先把同行的 "%%{init}%% flowchart TD" 拆成两行
+  result = result.replace(/^(\s*%%\{.*?\}%%)\s+((?:flowchart|graph)\s+\w+)\s*/, '$1\n$2\n');
   const lines = result.split('\n');
   const out: string[] = [];
-  const first = lines[0];
-  if (head && first.length > head.length) {
-    out.push(head.replace(/\s+$/, ''));
-    const rest = first.slice(head.length).trim();
-    if (rest) out.push('  ' + rest);
-  } else {
-    out.push(first.trimEnd());
-  }
-  for (let i = 1; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (t) out.push('  ' + t);
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) {
+      out.push('');
+    } else if (/^%%\{/.test(t) || /^(flowchart|graph)\b/.test(t)) {
+      out.push(t);
+    } else {
+      out.push('  ' + t);
+    }
   }
   return out.join('\n') + '\n';
 }
