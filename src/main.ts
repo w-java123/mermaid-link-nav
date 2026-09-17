@@ -741,12 +741,16 @@ export default class MermaidLinkNavPlugin extends Plugin {
       return clone;
     };
     const exportSvg = async () => {
-      const clone = getFullSvgClone();
-      if (!clone) { new Notice('导出失败：找不到 SVG'); return; }
-      const xml = new XMLSerializer().serializeToString(clone);
-      const data = new TextEncoder().encode(xml).buffer as ArrayBuffer;
-      const p = await writeToVault(`${fileNameBase}.svg`, data, 'svg');
-      if (p) new Notice(`SVG 已导出：${p}`);
+      try {
+        const clone = getFullSvgClone();
+        if (!clone) { new Notice('导出失败：找不到 SVG'); return; }
+        const xml = new XMLSerializer().serializeToString(clone);
+        const data = new TextEncoder().encode(xml).buffer as ArrayBuffer;
+        const p = await writeToVault(`${fileNameBase}.svg`, data, 'svg');
+        if (p) new Notice(`SVG 已导出：${p}`);
+      } catch (e) {
+        new Notice(`SVG 导出失败：${e instanceof Error ? e.message : String(e)}`);
+      }
     };
     const exportPng = async () => {
       const clone = getFullSvgClone();
