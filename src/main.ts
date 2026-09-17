@@ -109,6 +109,14 @@ export default class MermaidLinkNavPlugin extends Plugin {
       }),
     );
 
+    // 全局监听：文件重命名时，同步更新所有 mermaid 代码块中的跳转链接
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        if (!(file instanceof TFile)) return;
+        void this.updateMermaidLinksOnRename(file, oldPath);
+      }),
+    );
+
     this.addCommand({
       id: 'open-outline-flowchart',
       name: '打开当前笔记的流程图视图（Mermaid）',
@@ -165,6 +173,64 @@ export default class MermaidLinkNavPlugin extends Plugin {
   resolveTheme(): 'default' | 'dark' | 'forest' | 'neutral' {
     if (this.settings.theme !== 'auto') return this.settings.theme;
     return document.body.classList.contains('theme-dark') ? 'dark' : 'default';
+  }
+
+  /** 文件重命名时，遍历所有笔记，更新 mermaid 代码块中的跳转链接 */
+  private async updateMermaidLinksOnRename(file: TFile, oldPath: string): Promise<void> {
+    // 只处理 Markdown 文件
+    if (file.extension !== 'md') return;
+
+    // 计算旧/新链接路径（去掉 .md 扩展名）和文件名（不含路径）
+    const oldLinkPath = oldPath.replace(/\.md$/i, '');
+    const newLinkPath = file.path.replace(/\.md$/i, '');
+    const oldBasename = oldPath.split('/').pop()?.replace(/\.md$/i, '') ?? '';
+    const newBasename = file.path.split('/').pop()?.replace(/\.md$/i, '') ?? '';
+
+    // 需要替换的链接形式（完整路径优先，其次文件名）
+    const replacements: Array<[string, string]> = [];
+    if (oldLinkPath && oldLinkPath !== newLinkPath) {
+      replacements.push([oldLinkPath, newLinkPath]);
+    }
+    if (oldBasename && oldBasename !== newBasename && oldBasename !== oldLinkPath) {
+      replacements.push([oldBasename, newBasename]);
+    }
+    if (replacements.length === 0) return;
+
+    // 遍历所有 Markdown 笔记
+    const files = this.app.vault.getMarkdownFiles();
+    for (const note of files) {
+      try {
+        const content = await this.app.vault.read(note);
+        if (!content.includes('```mermaid') && !content.includes('~~~mermaid')) continue;
+
+        let modified = false;
+        // 匹配 mermaid 代码块（支持 ``` 和 ~~~）
+        const blockRe = /^[ \t]*(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^[ \t]*\1/gm;
+        const newContent = content.replace(blockRe, (full, marker: string, inner: string) => {
+          let updated = inner;
+          for (const [oldLink, newLink] of replacements) {
+            const oldEsc = oldLink.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // 替换 [[oldLink]] 和 [[oldLink|alias]]，保留锚点和别名
+            const re = new RegExp(`\\[\\[${oldEsc}(#[^\\]|]*)?(\\|[^\\]]*)?\\]\\]`, 'g');
+            if (re.test(updated)) {
+              modified = true;
+              updated = updated.replace(re, (_m, anchor: string, alias: string) => {
+                return `[[${newLink}${anchor ?? ''}${alias ?? ''}]]`;
+              });
+            }
+          }
+          if (!modified) return full;
+          const header = full.slice(0, full.indexOf('\n') + 1);
+          return header + updated.replace(/\n$/, '') + '\n' + marker;
+        });
+
+        if (modified) {
+          await this.app.vault.modify(note, newContent);
+        }
+      } catch {
+        // 忽略单个文件的读取错误
+      }
+    }
   }
 
   /** 渲染单个代码块 */
