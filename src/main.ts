@@ -697,7 +697,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     /** 确保定位/取消按钮存在（选中后显示） */
     const ensureActionButtons = () => {
       if (!locateBtn) {
-        locateBtn = btnBar.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前节点' });
+        locateBtn = btnBar.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前正在执行的节点' });
         locateBtn.addEventListener('click', () => {
           const cid = getCurrentNode(sourcePath);
           if (!cid) return;
