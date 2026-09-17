@@ -91,6 +91,8 @@
 .mermaid-link-wrapper svg {
   max-width: 100%;
   height: auto;
+  min-height: 140px; /* 兜底：极端情况至少显示一部分，避免手机端完全塌陷 */
+  display: block;
   cursor: grab;
   touch-action: none;
 }

@@ -347,6 +347,21 @@ export default class MermaidLinkNavPlugin extends Plugin {
     const svg = wrapper.querySelector<SVGSVGElement>('svg');
     const nodeEls = Array.from(wrapper.querySelectorAll<SVGGElement>('g.node'));
 
+    // 手机端 WebView 不支持 svg height:auto 按 viewBox 比例推导（高度塌陷为 0），
+    // 这里按 viewBox 比例显式计算并设置高度；窗口尺寸变化时重算。
+    if (svg) {
+      const vb = svg.viewBox.baseVal;
+      const fixSvgHeight = (): void => {
+        if (vb.width > 0 && svg.clientWidth > 0) {
+          const h = Math.round((svg.clientWidth * vb.height) / vb.width);
+          if (h > 0) svg.style.height = `${h}px`;
+        }
+      };
+      fixSvgHeight();
+      window.addEventListener('resize', fixSvgHeight);
+      window.setTimeout(fixSvgHeight, 60); // 等布局完成后再算一次
+    }
+
     // 还原每个节点 g 对应的源码节点 id
     const idOf = new Map<SVGGElement, string>();
     const knownIds = new Set<string>();

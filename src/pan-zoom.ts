@@ -190,8 +190,9 @@ export class PanZoomController {
       nodeRect.bottom <= svgRect.bottom;
     const target: Box = inView
       ? {
-          x: gx - cw / 2,
-          y: gy - ch / 2,
+          // 平移居中，但 clamp 到全图边界，避免竖长图放大后视口越界显示空白
+          x: Math.max(0, Math.min(gx - cw / 2, this.baseW - cw)),
+          y: Math.max(0, Math.min(gy - ch / 2, this.baseH - ch)),
           width: cw,
           height: ch,
         }
