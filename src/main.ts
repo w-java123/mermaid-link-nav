@@ -617,8 +617,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
                 });
                 const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
                 if (!ok) {
-                  const file = this.app.vault.getFileByPath(sourcePath);
-                  if (!file) new Notice('添加失败：找不到笔记文件');
+                  const file = this.app.vault.getAbstractFileByPath(sourcePath);
+                  if (!(file instanceof TFile)) new Notice('添加失败：找不到笔记文件');
                   else new Notice('添加失败：笔记源码已变化，请重新打开笔记后再试');
                 }
               },

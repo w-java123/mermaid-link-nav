@@ -3,7 +3,7 @@
  * 所有操作基于原始源码（含 [[wikilink]]），返回新源码。
  */
 import type { App } from 'obsidian';
-import { MarkdownView } from 'obsidian';
+import { MarkdownView, TFile } from 'obsidian';
 import { parseDiagram } from './parser';
 
 /** 支持的节点形状 */
@@ -540,8 +540,8 @@ export async function updateNoteSource(
   oldSource: string,
   newSource: string,
 ): Promise<boolean> {
-  const file = app.vault.getFileByPath(sourcePath);
-  if (!file) return false;
+  const file = app.vault.getAbstractFileByPath(sourcePath);
+  if (!(file instanceof TFile)) return false;
 
   // 记录当前页面滚动位置，写回后恢复（避免编辑后页面跳动）
   const view = app.workspace.getActiveViewOfType(MarkdownView);
