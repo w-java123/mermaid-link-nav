@@ -176,13 +176,28 @@ export class PanZoomController {
     const gy =
       ((nodeRect.top + nodeRect.height / 2 - svgRect.top) / svgRect.height) * ch +
       this.current.y;
-    // Pan only, no zoom: keep current viewBox size, center the node
-    const target: Box = {
-      x: gx - cw / 2,
-      y: gy - ch / 2,
-      width: cw,
-      height: ch,
-    };
+    // If the node's on-screen rect is inside the svg's on-screen rect, the
+    // node is visible: just pan to center it. Otherwise (zoomed in far away)
+    // zoom out to the full diagram so the node is visible immediately
+    // without a huge panning distance.
+    const inView =
+      nodeRect.left >= svgRect.left &&
+      nodeRect.top >= svgRect.top &&
+      nodeRect.right <= svgRect.right &&
+      nodeRect.bottom <= svgRect.bottom;
+    const target: Box = inView
+      ? {
+          x: gx - cw / 2,
+          y: gy - ch / 2,
+          width: cw,
+          height: ch,
+        }
+      : {
+          x: 0,
+          y: 0,
+          width: this.baseW,
+          height: this.baseH,
+        };
     this.animateTo(target);
   }
 
