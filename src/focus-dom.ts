@@ -218,6 +218,11 @@ export class DiagramFocusController {
       this.restore();
       return;
     }
+    this.focus(id);
+  }
+
+  /** 强制聚焦到指定节点（不切换，即使当前已聚焦也重新聚焦） */
+  focus(id: string): void {
     const subset = focusSubset(this.graph, this.edges, id, this.opts.includeAncestors);
     if (!subset.nodes.has(id)) return;
 

@@ -69,6 +69,29 @@ const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
 
 let renderSeq = 0;
 
+/** 当前选中节点的 localStorage key */
+const CURRENT_NODE_KEY = 'mermaid-link-nav:current-node';
+
+/** 读取某笔记的当前选中节点 ID */
+function getCurrentNode(sourcePath: string): string | null {
+  try {
+    const raw = localStorage.getItem(CURRENT_NODE_KEY);
+    if (raw) return (JSON.parse(raw) as Record<string, string>)[sourcePath] ?? null;
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** 设置某笔记的当前选中节点 ID（传 null 清除） */
+function setCurrentNode(sourcePath: string, nodeId: string | null): void {
+  try {
+    const raw = localStorage.getItem(CURRENT_NODE_KEY);
+    const data = raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    if (nodeId) data[sourcePath] = nodeId;
+    else delete data[sourcePath];
+    localStorage.setItem(CURRENT_NODE_KEY, JSON.stringify(data));
+  } catch { /* ignore */ }
+}
+
 export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
 
@@ -389,6 +412,25 @@ export default class MermaidLinkNavPlugin extends Plugin {
             }),
           );
 
+          // 设为/取消当前节点
+          const isCurrent = currentNodeId === nodeId;
+          menu.addItem((item) =>
+            item.setTitle(isCurrent ? '取消当前节点' : '设为当前节点').onClick(() => {
+              if (isCurrent) {
+                setCurrentNode(sourcePath, null);
+                g.classList.remove('mln-current-node');
+                if (locateBtn) locateBtn.style.display = 'none';
+              } else {
+                // 移除旧节点高亮
+                nodeEls.forEach((el) => el.classList.remove('mln-current-node'));
+                setCurrentNode(sourcePath, nodeId);
+                g.classList.add('mln-current-node');
+                if (locateBtn) locateBtn.style.display = '';
+                new Notice('已设为当前节点');
+              }
+            }),
+          );
+
           // 更换位置（与另一个节点交换显示内容）
           menu.addItem((item) =>
             item.setTitle('更换位置').onClick(async () => {
@@ -603,10 +645,14 @@ export default class MermaidLinkNavPlugin extends Plugin {
       if (hasItems) menu.showAtMouseEvent(ev);
     });
 
-    // 双击聚焦控制器
+    // 当前选中节点
+    const currentNodeId = getCurrentNode(sourcePath);
+
+    // 聚焦控制器（始终创建，供"定位当前节点"按钮使用）
     let controller: DiagramFocusController | null = null;
     let resetBtn: HTMLDivElement | null = null;
-    if (svg && this.settings.dblclickFocus) {
+    let locateBtn: HTMLDivElement | null = null;
+    if (svg) {
       controller = new DiagramFocusController(svg, edges, {
         renderId,
         knownIds,
@@ -619,25 +665,40 @@ export default class MermaidLinkNavPlugin extends Plugin {
         },
       });
 
-      resetBtn = wrapper.createDiv({ cls: 'mln-reset-btn', text: '↩ 返回全图' });
-      resetBtn.style.display = 'none';
-      resetBtn.addEventListener('click', () => controller?.restore());
+      // 定位到当前节点按钮
+      locateBtn = wrapper.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前节点' });
+      locateBtn.style.display = currentNodeId && knownIds.has(currentNodeId) ? '' : 'none';
+      locateBtn.addEventListener('click', () => {
+        const cid = getCurrentNode(sourcePath);
+        if (cid && knownIds.has(cid)) controller?.focus(cid);
+      });
 
-      // 双击空白区域复位；Esc 复位
-      svg.addEventListener('dblclick', (ev) => {
-        if (svg.dataset.mlnPan === '1') return; // 拖动结束后的误触发
-        if (!(ev.target as Element | null)?.closest('g.node')) controller?.restore();
-      });
-      wrapper.tabIndex = -1;
-      wrapper.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Escape') controller?.restore();
-      });
+      if (this.settings.dblclickFocus) {
+        resetBtn = wrapper.createDiv({ cls: 'mln-reset-btn', text: '↩ 返回全图' });
+        resetBtn.style.display = 'none';
+        resetBtn.addEventListener('click', () => controller?.restore());
+
+        // 双击空白区域复位；Esc 复位
+        svg.addEventListener('dblclick', (ev) => {
+          if (svg.dataset.mlnPan === '1') return; // 拖动结束后的误触发
+          if (!(ev.target as Element | null)?.closest('g.node')) controller?.restore();
+        });
+        wrapper.tabIndex = -1;
+        wrapper.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Escape') controller?.restore();
+        });
+      }
     }
 
     nodeEls.forEach((g) => {
       const nodeId = idOf.get(g);
       const link = nodeId ? links.get(nodeId) : undefined;
       g.style.userSelect = 'none';
+
+      // 当前选中节点高亮
+      if (nodeId && nodeId === currentNodeId) {
+        g.classList.add('mln-current-node');
+      }
 
       /* ---- 单击跳转 ---- */
       if (nodeId && link) {
