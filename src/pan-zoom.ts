@@ -101,12 +101,19 @@ export class PanZoomController {
     this.baseW = this.current.width;
     this.baseH = this.current.height;
     this.ratio = this.baseW > 0 ? this.baseH / this.baseW : 1;
-    // 监听 viewBox 变化（聚焦动画等）保持 current 同步；不再恢复/保存上次视图位置，
-    // 打开笔记始终完整显示全图，避免旧缓存导致视图偏移/大片空白
-    this.observer = new MutationObserver(() => {
-      this.current = this.readBox();
-    });
-    this.observer.observe(svg, { attributes: true, attributeFilter: ['viewBox'] });
+    // 恢复之前的缩放/平移状态
+    if (cacheKey) {
+      const cached = viewBoxCache.get(cacheKey);
+      if (cached) this.writeBox(cached);
+      // 监听 viewBox 变化（包括聚焦动画），自动保存
+      this.observer = new MutationObserver(() => {
+        const b = this.readBox();
+        this.current = b;
+        viewBoxCache.set(cacheKey, { ...b });
+        saveCache();
+      });
+      this.observer.observe(svg, { attributes: true, attributeFilter: ['viewBox'] });
+    }
     this.bind();
   }
 
@@ -118,6 +125,10 @@ export class PanZoomController {
   private writeBox(b: Box): void {
     this.svg.setAttribute('viewBox', `${b.x} ${b.y} ${b.width} ${b.height}`);
     this.current = b;
+    if (this.cacheKey) {
+      viewBoxCache.set(this.cacheKey, { ...b });
+      saveCache();
+    }
   }
 
   /** 从 SVG 同步当前 viewBox（聚焦动画可能已修改它） */
@@ -149,22 +160,23 @@ export class PanZoomController {
   /** 聚焦到指定节点元素：居中并适当放大，不隐藏其他节点 */
   /** Focus to a node element: center it and pan (no zoom). */
   focusElement(el: SVGGElement): void {
-    const bbox = el.getBBox();
-    if (bbox.width === 0 || bbox.height === 0) return;
-    // Key: mermaid draws each node centered at transform="translate(x,y)".
-    // Parse that coordinate as the node center (getScreenCTM is unreliable here).
-    let gx = bbox.x + bbox.width / 2;
-    let gy = bbox.y + bbox.height / 2;
-    const tf = el.getAttribute('transform') || '';
-    const m = /translate\(\s*([-\d.eE]+)\s*[,\s]\s*([-\d.eE]+)\s*\)/.exec(tf);
-    if (m) {
-      gx = parseFloat(m[1]);
-      gy = parseFloat(m[2]);
-    }
-    // Pan only, no zoom: keep current viewBox size, center the node
+    // Use rendered geometry (getBoundingClientRect) instead of transform parsing:
+    // it reflects the actual on-screen position, so the pan direction is always correct.
+    const nodeRect = el.getBoundingClientRect();
+    const svgRect = this.svg.getBoundingClientRect();
+    if (nodeRect.width === 0 || nodeRect.height === 0) return;
+    if (svgRect.width === 0 || svgRect.height === 0) return;
     const cw = this.current.width;
     const ch = this.current.height;
     if (cw <= 0 || ch <= 0) return;
+    // Map the node center from screen pixels to svg user coordinates
+    const gx =
+      ((nodeRect.left + nodeRect.width / 2 - svgRect.left) / svgRect.width) * cw +
+      this.current.x;
+    const gy =
+      ((nodeRect.top + nodeRect.height / 2 - svgRect.top) / svgRect.height) * ch +
+      this.current.y;
+    // Pan only, no zoom: keep current viewBox size, center the node
     const target: Box = {
       x: gx - cw / 2,
       y: gy - ch / 2,
@@ -173,7 +185,8 @@ export class PanZoomController {
     };
     this.animateTo(target);
   }
-    // Clamp to max zoom
+
+  /** Zoom around the screen point */
   private zoomAt(clientX: number, clientY: number, factor: number): void {
     const rect = this.svg.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
