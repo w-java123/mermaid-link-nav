@@ -1,4 +1,3 @@
-/* eslint-disable obsidianmd/no-static-style-assignment */
 /**
  * 聚焦控制器：在渲染好的 mermaid SVG 上做
  * 「隐藏无关节点/边 + viewBox 平滑放大」与「全部恢复 + 缩回全图」。
@@ -78,7 +77,7 @@ export class DiagramFocusController {
 
   /** 临时全部显示后测量目标集合的 viewBox（display:none 的节点测不到 bbox） */
   private viewBoxFor(visible: Set<string>): Box {
-    this.nodeMap.forEach((g) => (g.style.display = ''));
+    this.nodeMap.forEach((g) => (g.classList.remove('mln-hidden')));
     const els = [...visible].map((id) => this.nodeMap.get(id)).filter(Boolean) as SVGGElement[];
     return this.targetViewBox(els);
   }
@@ -234,8 +233,8 @@ export class DiagramFocusController {
     });
     this.edgeDoms.forEach((e) => {
       const show = subset.edges.has(edgeKey(e.from, e.to));
-      e.path.style.display = show ? '' : 'none';
-      if (e.label) e.label.style.display = show ? '' : 'none';
+      show ? e.path.classList.remove('mln-hidden') : e.path.classList.add('mln-hidden');
+      if (e.label) show ? e.label.classList.remove('mln-hidden') : e.label.classList.add('mln-hidden');
     });
 
     this.focusRoot?.classList.remove('mln-focus-root');
@@ -251,11 +250,11 @@ export class DiagramFocusController {
     this.focusRoot = null;
     this.currentFocus = null;
     this.nodeMap.forEach((g) => {
-      g.style.display = '';
+      g.classList.remove('mln-hidden');
     });
     this.edgeDoms.forEach((e) => {
-      e.path.style.display = '';
-      e.label && (e.label.style.display = '');
+      e.path.classList.remove('mln-hidden');
+      e.label?.classList.remove('mln-hidden');
     });
     this.animate(this.initialView);
     this.opts.onFocusChange?.(false, null);

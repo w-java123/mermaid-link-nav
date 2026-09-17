@@ -1,5 +1,3 @@
-/* eslint-disable obsidianmd/no-static-style-assignment */
-/* eslint-disable obsidianmd/no-unscoped-localstorage */
 import {
   App,
   MarkdownPostProcessorContext,
@@ -290,9 +288,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
       // 单行压缩格式规范化后再渲染，避免 mermaid 11 解析/渲染崩溃（孤立节点定义夹在语句间）
       const renderCode = normalizeDiagram(parsed.code);
       const result = await mermaid.render(renderId, renderCode, wrapper);
-      // mermaid 渲染结果必须通过 innerHTML 插入 SVG
-      // eslint-disable-next-line obsidianmd/no-inner-html
-      wrapper.innerHTML = result.svg;
+      const svgDoc = new DOMParser().parseFromString(result.svg, 'image/svg+xml');
+      wrapper.appendChild(svgDoc.documentElement);
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
       this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source);
@@ -356,13 +353,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
       return new Promise((resolve) => {
         if (!svg) { resolve(null); return; }
         const hint = document.createElement('div');
-        hint.style.cssText = [
-          'position:fixed', 'z-index:1000', 'pointer-events:none',
-          'background:var(--background-primary)', 'border:2px solid var(--interactive-accent)',
-          'border-radius:8px', 'padding:14px 24px', 'font-size:18px',
-          'box-shadow:0 4px 20px rgba(0,0,0,0.3)', 'white-space:nowrap',
-          'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
-        ].join(';');
+        hint.classList.add('mln-hint-center');
         setHintText(hint, hintText, redWord);
         document.body.appendChild(hint);
 
@@ -477,13 +468,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
               // 浮动提示：定位在当前节点上方
               const hint = document.createElement('div');
-              hint.style.cssText = [
-                'position:fixed', 'z-index:1000', 'pointer-events:none',
-                'background:var(--background-primary)', 'border:1px solid var(--background-modifier-border)',
-                'border-radius:6px', 'padding:8px 14px', 'font-size:14px',
-                'box-shadow:0 2px 10px rgba(0,0,0,0.2)', 'white-space:nowrap',
-                'transform:translate(-50%,-100%)',
-              ].join(';');
+              hint.classList.add('mln-hint-above');
               const setHint = (text: string, redWord: string) => {
                 setHintText(hint, text, redWord);
                 const rect = g.getBoundingClientRect();
@@ -664,13 +649,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     // 选择当前节点模式：屏幕中间提示，点击节点即选中
     const startSelectMode = () => {
       const hint = document.createElement('div');
-      hint.style.cssText = [
-        'position:fixed', 'top:50%', 'left:50%', 'transform:translate(-50%,-50%)',
-        'z-index:2000', 'pointer-events:none',
-        'background:var(--background-primary)', 'border:2px solid var(--interactive-accent)',
-        'border-radius:10px', 'padding:16px 28px', 'font-size:18px', 'font-weight:600',
-        'box-shadow:0 4px 20px rgba(0,0,0,0.3)', 'white-space:nowrap',
-      ].join(';');
+      hint.classList.add('mln-hint-center', 'mln-hint-bold');
       hint.textContent = '请选中当前正在执行的节点';
       document.body.appendChild(hint);
 
@@ -709,7 +688,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     nodeEls.forEach((g) => {
       const nodeId = idOf.get(g);
       const link = nodeId ? links.get(nodeId) : undefined;
-      g.style.userSelect = 'none';
+      g.classList.add('mln-noselect');
 
       /* ---- 单击跳转 ---- */
       if (nodeId && link) {

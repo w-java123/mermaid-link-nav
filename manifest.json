@@ -1,9 +1,9 @@
 {
   "id": "mermaid-link-nav",
   "name": "Mermaid Link Navigator",
-  "version": "1.15.8",
+  "version": "1.15.9",
   "minAppVersion": "1.5.0",
-  "description": "Embed [[note links]] in Mermaid flowchart nodes, Ctrl/⌘+click to navigate; right-click visual editing (add/edit/delete nodes, change shape, decision nodes, parent/child links); canvas zoom/pan; current node marker and locate; auto-sync links on note rename.",
+  "description": "Mermaid flowchart nodes with [[note links]], Ctrl+click to open; right-click visual editing; canvas zoom/pan; current node locate; auto-sync links on rename.",
   "author": "w-java123",
   "authorUrl": "https://github.com/w-java123",
   "isDesktopOnly": false

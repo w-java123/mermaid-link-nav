@@ -179,8 +179,8 @@
 .mln-outline-wrapper g.node.mln-outline-root circle,
 .mln-outline-wrapper g.node.mln-outline-root ellipse,
 .mln-outline-wrapper g.node.mln-outline-root path.label-container {
-  fill: var(--interactive-accent) !important;
-  stroke: var(--interactive-accent) !important;
+  fill: var(--interactive-accent) ;
+  stroke: var(--interactive-accent) ;
 }
 .mln-outline-wrapper g.node.mln-outline-root .nodeLabel,
 .mln-outline-wrapper g.node.mln-outline-root label,
@@ -218,3 +218,26 @@
   border-radius: 6px;
   padding: 0.6em 0.8em;
 }
+
+/* 节点/边隐藏类 */
+.mln-hidden { display: none; }
+
+/* 选择节点提示框（居中） */
+.mln-hint-center {
+  position: fixed; z-index: 1000; pointer-events: none;
+  background: var(--background-primary); border: 2px solid var(--interactive-accent);
+  border-radius: 8px; padding: 14px 24px; font-size: 18px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3); white-space: nowrap;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+}
+
+/* 节点上方提示框 */
+.mln-hint-above {
+  position: fixed; z-index: 1000; pointer-events: none;
+  background: var(--background-primary); border: 1px solid var(--background-modifier-border);
+  border-radius: 6px; padding: 8px 14px; font-size: 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2); white-space: nowrap;
+  transform: translate(-50%, -100%);
+}
+.mln-hint-bold { font-weight: 600; }
+.mln-noselect { user-select: none; }

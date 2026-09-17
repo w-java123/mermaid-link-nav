@@ -1,4 +1,3 @@
-/* eslint-disable obsidianmd/no-static-style-assignment */
 /**
  * 流程图视图：把当前笔记大纲用 mermaid 渲染成 flowchart。
  * 单击节点跳转到笔记对应行（Ctrl/Cmd 新标签、Alt 分屏），双击节点聚焦分支。
@@ -64,7 +63,7 @@ export class OutlineFlowView extends ItemView {
       cls: 'mln-outline-btn',
       text: '返回全图',
     });
-    this.resetBtn.style.display = 'none';
+    this.resetBtn.classList.add('mln-hidden');
     this.resetBtn.addEventListener('click', () => this.controller?.restore());
     this.toolbar.createEl('button', { cls: 'mln-outline-btn', text: '刷新' }).addEventListener('click', () => {
       void this.render();
@@ -131,7 +130,7 @@ export class OutlineFlowView extends ItemView {
     this.controller = null;
     this.panZoom?.dispose();
     this.panZoom = null;
-    this.resetBtn.style.display = 'none';
+    this.resetBtn.classList.add('mln-hidden');
     this.stage.empty();
 
     const file = this.activeFile;
@@ -185,9 +184,8 @@ export class OutlineFlowView extends ItemView {
         document.getElementById(`d${renderId}`)?.remove();
         return;
       }
-      // mermaid 渲染结果必须通过 innerHTML 插入 SVG
-      // eslint-disable-next-line obsidianmd/no-inner-html
-      wrapper.innerHTML = result.svg;
+      const svgDoc = new DOMParser().parseFromString(result.svg, 'image/svg+xml');
+      wrapper.appendChild(svgDoc.documentElement);
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
       this.enhance(wrapper, diagram.lines, diagram.edges, renderId);
@@ -236,7 +234,7 @@ export class OutlineFlowView extends ItemView {
         duration: this.plugin.settings.zoomDuration,
         paddingRatio: this.plugin.settings.zoomPaddingRatio,
         onFocusChange: (focused) => {
-          this.resetBtn.style.display = focused ? '' : 'none';
+          focused ? this.resetBtn.classList.remove('mln-hidden') : this.resetBtn.classList.add('mln-hidden');
         },
       });
       svg.addEventListener('dblclick', (ev) => {
@@ -254,7 +252,7 @@ export class OutlineFlowView extends ItemView {
       if (s.hoverHighlight) g.classList.add('mln-hover-highlight');
       g.setAttribute('tabindex', '0');
       g.setAttribute('role', 'link');
-      g.style.userSelect = 'none';
+      g.classList.add('mln-noselect');
 
       if (s.showTooltip) {
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
