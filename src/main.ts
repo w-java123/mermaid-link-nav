@@ -435,9 +435,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
         if (nodeId && knownIds.has(nodeId)) {
           const link = links.get(nodeId);
 
-          // 添加父节点（替换原有父节点：删除入边，建立 选中 --> 当前）
+          // 选择父节点（替换原有父节点：删除入边，建立 选中 --> 当前）
           menu.addItem((item) =>
-            item.setTitle('添加父节点').onClick(async () => {
+            item.setTitle('选择父节点').onClick(async () => {
               const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
               const selectedId = await pickNode(
                 `请点击选择要添加为【父】节点的节点（当前节点：${curLabel}，Esc 取消）`,
@@ -446,13 +446,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
               if (!selectedId) return;
               const newSource = setParent(diagramSource, nodeId, selectedId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-              if (!ok) new Notice('添加父节点失败');
+              if (!ok) new Notice('选择父节点失败');
             }),
           );
 
-          // 添加子节点（选择已存在节点，建立 当前 --> 选中 的连线）
+          // 选择子节点（选择已存在节点，建立 当前 --> 选中 的连线）
           menu.addItem((item) =>
-            item.setTitle('添加子节点').onClick(async () => {
+            item.setTitle('选择子节点').onClick(async () => {
               const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
               const selectedId = await pickNode(
                 `请点击选择要添加为【子】节点的节点（当前节点：${curLabel}，Esc 取消）`,
@@ -461,24 +461,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
               if (!selectedId) return;
               const newSource = addEdge(diagramSource, nodeId, selectedId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-              if (!ok) new Notice('添加子节点失败');
+              if (!ok) new Notice('选择子节点失败');
             }),
           );
 
-          // 更换位置（与另一个节点交换显示内容）
-          menu.addItem((item) =>
-            item.setTitle('更换位置').onClick(async () => {
-              const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
-              const targetId = await pickNode(
-                `请点击选择要与【${curLabel}】更换位置的节点（Esc 取消）`,
-                `【${curLabel}】`, nodeId,
-              );
-              if (!targetId) return;
-              const newSource = swapNodes(diagramSource, nodeId, targetId);
-              const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-              if (!ok) new Notice('更换位置失败');
-            }),
-          );
+          menu.addSeparator();
 
           // 编辑节点
           menu.addItem((item) =>
@@ -500,6 +487,38 @@ export default class MermaidLinkNavPlugin extends Plugin {
                   if (!ok) new Notice('更新笔记失败');
                 },
               }).open();
+            }),
+          );
+
+          // 更换位置（与另一个节点交换显示内容）
+          menu.addItem((item) =>
+            item.setTitle('更换位置').onClick(async () => {
+              const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
+              const targetId = await pickNode(
+                `请点击选择要与【${curLabel}】更换位置的节点（Esc 取消）`,
+                `【${curLabel}】`, nodeId,
+              );
+              if (!targetId) return;
+              const newSource = swapNodes(diagramSource, nodeId, targetId);
+              const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+              if (!ok) new Notice('更换位置失败');
+            }),
+          );
+
+          // 改变形状
+          menu.addItem((item) =>
+            item.setTitle('改变形状').onClick((ev) => {
+              const shapeMenu = new Menu();
+              NODE_SHAPES.forEach((shape) => {
+                shapeMenu.addItem((sub) =>
+                  sub.setTitle(shape.label).onClick(async () => {
+                    const newSource = changeNodeShape(diagramSource, nodeId, shape.type);
+                    const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                    if (!ok) new Notice('改变形状失败');
+                  }),
+                );
+              });
+              shapeMenu.showAtMouseEvent(ev as MouseEvent);
             }),
           );
 
@@ -588,44 +607,31 @@ export default class MermaidLinkNavPlugin extends Plugin {
             );
           }
 
-          // 移除父节点（删除所有入边）
+          menu.addSeparator();
+
+          // 断开父节点（删除所有入边）
           menu.addItem((item) =>
-            item.setTitle('移除父节点').onClick(async () => {
+            item.setTitle('断开父节点').onClick(async () => {
               const newSource = removeIncomingEdges(diagramSource, nodeId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-              if (!ok) new Notice('移除父节点失败');
+              if (!ok) new Notice('断开父节点失败');
             }),
           );
 
-          // 移除子节点（删除所有出边）
+          // 断开子节点（删除所有出边）
           menu.addItem((item) =>
-            item.setTitle('移除子节点').onClick(async () => {
+            item.setTitle('断开子节点').onClick(async () => {
               const newSource = removeOutgoingEdges(diagramSource, nodeId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-              if (!ok) new Notice('移除子节点失败');
+              if (!ok) new Notice('断开子节点失败');
             }),
           );
 
-          // 改变形状
-          menu.addItem((item) =>
-            item.setTitle('改变形状').onClick((ev) => {
-              const shapeMenu = new Menu();
-              NODE_SHAPES.forEach((shape) => {
-                shapeMenu.addItem((sub) =>
-                  sub.setTitle(shape.label).onClick(async () => {
-                    const newSource = changeNodeShape(diagramSource, nodeId, shape.type);
-                    const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
-                    if (!ok) new Notice('改变形状失败');
-                  }),
-                );
-              });
-              shapeMenu.showAtMouseEvent(ev as MouseEvent);
-            }),
-          );
+          menu.addSeparator();
 
           // 删除节点
           menu.addItem((item) =>
-            item.setTitle('删除节点').onClick(async () => {
+            item.setTitle('删除节点').setWarning(true).onClick(async () => {
               const newSource = deleteNode(diagramSource, nodeId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
               if (!ok) new Notice('删除节点失败');
