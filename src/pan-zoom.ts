@@ -158,8 +158,7 @@ export class PanZoomController {
   }
 
   /** 聚焦到指定节点元素：居中并适当放大，不隐藏其他节点 */
-  /** 鑱氱劍鍒版寚瀹氳妭鐐瑰厓绱狅細灞呬腑骞堕€傚綋鏀惧ぇ锛屼笉闅愯棌鍏朵粬鑺傜偣 */
-  /** Focus to a node element: center it and zoom in, keeping other nodes visible. */
+  /** Focus to a node element: center it and pan (no zoom). */
   focusElement(el: SVGGElement): void {
     const bbox = el.getBBox();
     if (bbox.width === 0 || bbox.height === 0) return;
