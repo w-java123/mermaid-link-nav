@@ -86,22 +86,29 @@ function setHintText(hint: HTMLElement, text: string, redWord: string): void {
 
 /** 当前节点高亮色（与红色选择按钮一致） */
 const CURRENT_NODE_COLOR = '#e93147';
+/** 当前节点高亮色（与红色选择按钮一致） */
 
-/** 应用当前节点高亮：红色粗描边 + 光晕 */
+/** 应用当前节点高亮：红色底填充 + 粗描边 + 呼吸光晕（record 原值便于恢复） */
 function applyCurrentNodeHighlight(nodeG: SVGGElement): void {
   nodeG.classList.add('mln-current-node');
   nodeG.querySelectorAll<SVGElement>('rect, path, circle, polygon, ellipse').forEach((shape) => {
+    shape.dataset.mlnOrigFill = shape.style.fill || shape.getAttribute('fill') || '';
+    shape.dataset.mlnOrigStroke = shape.style.stroke || shape.getAttribute('stroke') || '';
     shape.style.stroke = CURRENT_NODE_COLOR;
-    shape.style.strokeWidth = '3px';
+    shape.style.strokeWidth = '4px';
+    shape.style.fill = 'rgba(255, 90, 105, 0.3)';
   });
 }
 
-/** 清除当前节点高亮，恢复 mermaid 默认描边 */
+/** 清除当前节点高亮，恢复 mermaid 默认样式 */
 function clearCurrentNodeHighlight(nodeG: SVGGElement): void {
   nodeG.classList.remove('mln-current-node');
   nodeG.querySelectorAll<SVGElement>('rect, path, circle, polygon, ellipse').forEach((shape) => {
-    shape.style.stroke = '';
+    shape.style.stroke = shape.dataset.mlnOrigStroke ?? '';
     shape.style.strokeWidth = '';
+    shape.style.fill = shape.dataset.mlnOrigFill ?? '';
+    delete shape.dataset.mlnOrigFill;
+    delete shape.dataset.mlnOrigStroke;
   });
 }
 

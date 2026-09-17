@@ -247,3 +247,17 @@
 .mln-current-node {
   filter: drop-shadow(0 0 6px rgba(233, 49, 71, 0.75));
 }
+
+/* 当前节点高亮：呼吸闪烁光晕（醒目） */
+.mln-current-node {
+  animation: mln-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes mln-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(255, 50, 70, 0.95)) drop-shadow(0 0 14px rgba(255, 50, 70, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(255, 40, 60, 1)) drop-shadow(0 0 28px rgba(255, 40, 60, 0.95));
+  }
+}
