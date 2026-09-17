@@ -79,6 +79,30 @@ export function removeEdge(source: string, fromId: string, toId: string): string
   return result.join('\n').replace(/\n{3,}/g, '\n\n');
 }
 
+/** 交换两个节点的定义内容（标签+形状），ID 不变，相当于互换位置 */
+export function swapNodes(source: string, idA: string, idB: string): string {
+  const parsed = parseDiagram(source);
+  const nodeA = parsed.nodes.find((n) => n.id === idA);
+  const nodeB = parsed.nodes.find((n) => n.id === idB);
+  if (!nodeA || !nodeB) return source;
+
+  // 提取节点定义内容（不含 ID，从形状开括号到闭括号后）
+  const contentA = source.slice(nodeA.start + idA.length, nodeA.end);
+  const contentB = source.slice(nodeB.start + idB.length, nodeB.end);
+
+  // 从后往前替换，避免位置偏移
+  const [first, second] = nodeA.start < nodeB.start
+    ? [{ node: nodeB, content: contentA }, { node: nodeA, content: contentB }]
+    : [{ node: nodeA, content: contentB }, { node: nodeB, content: contentA }];
+
+  let result = source;
+  for (const { node, content } of [first, second]) {
+    const defStart = node.start + node.id.length;
+    result = result.slice(0, defStart) + content + result.slice(node.end);
+  }
+  return result;
+}
+
 /** 在源码末尾追加新节点定义和连线；若同时指定上下游，则删除原上下游直连边，使新节点夹在中间 */
 export function addNode(source: string, opts: AddNodeOptions): { newSource: string; newId: string } {
   const newId = generateId(source);

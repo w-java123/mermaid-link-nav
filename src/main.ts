@@ -16,7 +16,7 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
-import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, updateNoteSource } from './diagram-edit';
+import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, swapNodes, updateNoteSource } from './diagram-edit';
 import { NodeEditModal, NodeEditResult } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
@@ -319,6 +319,21 @@ export default class MermaidLinkNavPlugin extends Plugin {
               const newSource = addEdge(diagramSource, nodeId, selectedId);
               const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
               if (!ok) new Notice('添加子节点失败');
+            }),
+          );
+
+          // 更换位置（与另一个节点交换显示内容）
+          menu.addItem((item) =>
+            item.setTitle('更换位置').onClick(async () => {
+              const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
+              const targetId = await pickNode(
+                `请点击选择要与【${curLabel}】更换位置的节点（Esc 取消）`,
+                `【${curLabel}】`, nodeId,
+              );
+              if (!targetId) return;
+              const newSource = swapNodes(diagramSource, nodeId, targetId);
+              const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+              if (!ok) new Notice('更换位置失败');
             }),
           );
 
