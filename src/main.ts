@@ -666,14 +666,38 @@ export default class MermaidLinkNavPlugin extends Plugin {
     if (svg) wrapper.insertBefore(btnBar, svg); // 按钮栏放在 svg 上方（此前在 svg 下方被长图藏住）
     const selectBtn = btnBar.createDiv({ cls: 'mln-select-btn', text: currentNodeId ? '重新选择当前正在执行的节点' : '选择当前正在执行的节点' });
     let locateBtn: HTMLDivElement | null = null;
+    let clearBtn: HTMLDivElement | null = null;
+
+    /** 取消选中：清当前节点、清高亮、复位按钮 */
+    const clearSelection = () => {
+      setCurrentNode(sourcePath, null);
+      nodeEls.forEach((g) => { if (g.classList.contains('mln-current-node')) clearCurrentNodeHighlight(g); });
+      selectBtn.setText('选择当前正在执行的节点');
+      locateBtn?.remove();
+      locateBtn = null;
+      clearBtn?.remove();
+      clearBtn = null;
+    };
+
+    /** 确保定位/取消按钮存在（选中后显示） */
+    const ensureActionButtons = () => {
+      if (!locateBtn) {
+        locateBtn = btnBar.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前节点' });
+        locateBtn.addEventListener('click', () => {
+          const cid = getCurrentNode(sourcePath);
+          if (!cid) return;
+          const targetG = nodeEls.find((g) => idOf.get(g) === cid);
+          if (targetG && panZoom) panZoom.focusElement(targetG);
+        });
+      }
+      if (!clearBtn) {
+        clearBtn = btnBar.createDiv({ cls: 'mln-clear-btn', text: '取消选中当前正在执行的节点' });
+        clearBtn.addEventListener('click', clearSelection);
+      }
+    };
+
     if (currentNodeId && knownIds.has(currentNodeId)) {
-      locateBtn = btnBar.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前节点' });
-      locateBtn.addEventListener('click', () => {
-        const cid = getCurrentNode(sourcePath);
-        if (!cid) return;
-        const targetG = nodeEls.find((g) => idOf.get(g) === cid);
-        if (targetG && panZoom) panZoom.focusElement(targetG);
-      });
+      ensureActionButtons();
     }
 
     // 选择当前节点模式：屏幕中间提示，点击节点即选中
@@ -702,15 +726,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
         applyCurrentNodeHighlight(targetG);
         // 更新按钮状态
         selectBtn.setText('重新选择当前正在执行的节点');
-        if (!locateBtn) {
-          locateBtn = btnBar.createDiv({ cls: 'mln-locate-btn', text: '🎯 定位当前节点' });
-          locateBtn.addEventListener('click', () => {
-            const cid = getCurrentNode(sourcePath);
-            if (!cid) return;
-            const tg = nodeEls.find((g) => idOf.get(g) === cid);
-            if (tg && panZoom) panZoom.focusElement(tg);
-          });
-        }
+        ensureActionButtons();
         new Notice('已设为当前节点');
       };
       svg?.addEventListener('click', onClick, true);
