@@ -81,6 +81,9 @@ export class PanZoomController {
   private lastY = 0;
   private panned = false;
   private observer?: MutationObserver;
+  /** 触屏多指跟踪：用于双指捏合缩放 */
+  private readonly pointers = new Map<number, { x: number; y: number }>();
+  private pinchDist = 0;
 
   private readonly handlers: Array<{
     type: string;
@@ -262,6 +265,16 @@ export class PanZoomController {
       const ev = e as PointerEvent;
       if (ev.pointerType === 'mouse' && ev.button !== 0) return;
       this.sync();
+      this.pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (this.pointers.size >= 2) {
+        // 双指捏合：取消单指拖动状态
+        this.dragging = false;
+        this.svg.classList.remove('mln-panning');
+        delete this.svg.dataset.mlnPan;
+        const [p1, p2] = [...this.pointers.values()];
+        this.pinchDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        return;
+      }
       this.dragging = true;
       this.panned = false;
       this.startX = this.lastX = ev.clientX;
@@ -270,8 +283,22 @@ export class PanZoomController {
     };
 
     const onPointerMove = (e: Event): void => {
-      if (!this.dragging) return;
       const ev = e as PointerEvent;
+      if (!this.pointers.has(ev.pointerId)) return;
+      this.pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (this.pointers.size >= 2) {
+        // 双指捏合缩放：以两指中心为缩放中心，缩放因子 = 距离变化率
+        const [p1, p2] = [...this.pointers.values()];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        if (this.pinchDist > 0 && dist > 0) {
+          const cx = (p1.x + p2.x) / 2;
+          const cy = (p1.y + p2.y) / 2;
+          this.zoomAt(cx, cy, dist / this.pinchDist);
+        }
+        this.pinchDist = dist;
+        return;
+      }
+      if (!this.dragging) return;
       const dx = ev.clientX - this.lastX;
       const dy = ev.clientY - this.lastY;
       this.lastX = ev.clientX;
@@ -293,8 +320,10 @@ export class PanZoomController {
     };
 
     const onPointerUp = (e: Event): void => {
-      if (!this.dragging) return;
       const ev = e as PointerEvent;
+      this.pointers.delete(ev.pointerId);
+      if (this.pointers.size < 2) this.pinchDist = 0;
+      if (!this.dragging) return;
       this.dragging = false;
       this.svg.classList.remove('mln-panning');
       if (this.panned) {
