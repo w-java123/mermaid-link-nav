@@ -101,19 +101,12 @@ export class PanZoomController {
     this.baseW = this.current.width;
     this.baseH = this.current.height;
     this.ratio = this.baseW > 0 ? this.baseH / this.baseW : 1;
-    // 恢复之前的缩放/平移状态
-    if (cacheKey) {
-      const cached = viewBoxCache.get(cacheKey);
-      if (cached) this.writeBox(cached);
-      // 监听 viewBox 变化（包括聚焦动画），自动保存
-      this.observer = new MutationObserver(() => {
-        const b = this.readBox();
-        this.current = b;
-        viewBoxCache.set(cacheKey, { ...b });
-        saveCache();
-      });
-      this.observer.observe(svg, { attributes: true, attributeFilter: ['viewBox'] });
-    }
+    // 监听 viewBox 变化（聚焦动画等）保持 current 同步；不再恢复/保存上次视图位置，
+    // 打开笔记始终完整显示全图，避免旧缓存导致视图偏移/大片空白
+    this.observer = new MutationObserver(() => {
+      this.current = this.readBox();
+    });
+    this.observer.observe(svg, { attributes: true, attributeFilter: ['viewBox'] });
     this.bind();
   }
 
@@ -125,10 +118,6 @@ export class PanZoomController {
   private writeBox(b: Box): void {
     this.svg.setAttribute('viewBox', `${b.x} ${b.y} ${b.width} ${b.height}`);
     this.current = b;
-    if (this.cacheKey) {
-      viewBoxCache.set(this.cacheKey, { ...b });
-      saveCache();
-    }
   }
 
   /** 从 SVG 同步当前 viewBox（聚焦动画可能已修改它） */
