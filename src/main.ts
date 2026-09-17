@@ -103,31 +103,16 @@ function setHintText(hint: HTMLElement, text: string, redWord: string): void {
 /** 当前选中节点的 localStorage key */
 
 /** 当前节点高亮色（与红色选择按钮一致） */
-const CURRENT_NODE_COLOR = '#e93147';
 /** 当前节点高亮色（与红色选择按钮一致） */
 
-/** 应用当前节点高亮：红色底填充 + 粗描边 + 呼吸光晕（record 原值便于恢复） */
+/** 应用当前节点高亮：加 CSS 类（红色填充 + 粗描边 + 呼吸光晕），样式在 styles.css */
 function applyCurrentNodeHighlight(nodeG: SVGGElement): void {
   nodeG.classList.add('mln-current-node');
-  nodeG.querySelectorAll<SVGElement>('rect, path, circle, polygon, ellipse').forEach((shape) => {
-    shape.dataset.mlnOrigFill = shape.style.fill || shape.getAttribute('fill') || '';
-    shape.dataset.mlnOrigStroke = shape.style.stroke || shape.getAttribute('stroke') || '';
-    shape.style.stroke = CURRENT_NODE_COLOR;
-    shape.style.strokeWidth = '4px';
-    shape.style.fill = 'rgba(255, 90, 105, 0.3)';
-  });
 }
 
-/** 清除当前节点高亮，恢复 mermaid 默认样式 */
+/** 清除当前节点高亮：移除 CSS 类，恢复 mermaid 默认样式 */
 function clearCurrentNodeHighlight(nodeG: SVGGElement): void {
   nodeG.classList.remove('mln-current-node');
-  nodeG.querySelectorAll<SVGElement>('rect, path, circle, polygon, ellipse').forEach((shape) => {
-    shape.style.stroke = shape.dataset.mlnOrigStroke ?? '';
-    shape.style.strokeWidth = '';
-    shape.style.fill = shape.dataset.mlnOrigFill ?? '';
-    delete shape.dataset.mlnOrigFill;
-    delete shape.dataset.mlnOrigStroke;
-  });
 }
 
 const CURRENT_NODE_KEY = 'mermaid-link-nav:current-node';
@@ -750,8 +735,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
       clone.setAttribute('viewBox', `0 0 ${base.width} ${base.height}`);
       clone.setAttribute('width', String(base.width));
       clone.setAttribute('height', String(base.height));
-      // 导出文件显示时居中
-      clone.setAttribute('style', 'display:block;margin:0 auto;max-width:100%;height:auto;');
+      // 导出文件显示时居中（以 svg 内 <style> 规则实现，避免直接给元素设置 style）
+      const centerStyle = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      centerStyle.textContent = 'svg{display:block;margin:0 auto;max-width:100%;height:auto;}';
+      clone.insertBefore(centerStyle, clone.firstChild);
       // 移除可能引入外部资源（污染 canvas）的引用，保证 PNG 可导出
       // mermaid 节点文字在 <foreignObject> 里，必须保留；只移除可能加载外部资源的 <image>
       clone.querySelectorAll('image').forEach((el) => el.remove());
@@ -760,14 +747,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
           .replace(/@import[^;]+;/gi, '')
           .replace(/url\(\s*(?!#)[^)]*\)/gi, 'url(#none)');
       });
-      // 导出不保留"当前节点"红色高亮：恢复原样式、移除高亮类，所有节点格式一致
-      clone.querySelectorAll<SVGElement>('.mln-current-node rect, .mln-current-node path, .mln-current-node circle, .mln-current-node polygon, .mln-current-node ellipse').forEach((shape) => {
-        shape.style.stroke = shape.dataset.mlnOrigStroke ?? '';
-        shape.style.strokeWidth = '';
-        shape.style.fill = shape.dataset.mlnOrigFill ?? '';
-        delete shape.dataset.mlnOrigStroke;
-        delete shape.dataset.mlnOrigFill;
-      });
+      // 导出不保留"当前节点"高亮：移除高亮类（样式在 Obsidian CSS 中，不在导出文件里），所有节点格式一致
       clone.querySelectorAll('.mln-current-node').forEach((el) => el.classList.remove('mln-current-node'));
       return clone;
     };

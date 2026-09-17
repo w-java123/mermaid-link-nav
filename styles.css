@@ -298,6 +298,17 @@
 .mln-hint-bold { font-weight: 600; }
 .mln-noselect { user-select: none; }
 
+/* 当前节点高亮：形状填充与描边（由 JS 添加/移除类控制） */
+.mln-current-node rect,
+.mln-current-node path,
+.mln-current-node circle,
+.mln-current-node polygon,
+.mln-current-node ellipse {
+  stroke: #e93147 !important;
+  stroke-width: 4px !important;
+  fill: rgba(255, 90, 105, 0.3) !important;
+}
+
 /* 当前节点高亮光晕 */
 .mln-current-node {
   filter: drop-shadow(0 0 6px rgba(233, 49, 71, 0.75));
