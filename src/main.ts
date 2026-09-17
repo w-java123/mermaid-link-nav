@@ -37,16 +37,6 @@ interface MermaidLinkNavSettings {
   showTooltip: boolean;
   /** 悬停高亮可点击节点 */
   hoverHighlight: boolean;
-  /** 双击节点聚焦分支、再次双击复位 */
-  dblclickFocus: boolean;
-  /** 聚焦时保留祖先链（上游路径） */
-  includeAncestors: boolean;
-  /** 单击与双击判定延时（ms），双击聚焦开启时生效 */
-  clickDelayMs: number;
-  /** 聚焦缩放动画时长（ms） */
-  zoomDuration: number;
-  /** 聚焦留白比例 */
-  zoomPaddingRatio: number;
   /** 点击不存在的链接时，自动创建笔记的目标文件夹（留空=Obsidian 默认位置） */
   newNoteFolder: string;
 }
@@ -58,11 +48,6 @@ const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
   openMode: 'active',
   showTooltip: true,
   hoverHighlight: true,
-  dblclickFocus: true,
-  includeAncestors: true,
-  clickDelayMs: 220,
-  zoomDuration: 320,
-  zoomPaddingRatio: 0.15,
   newNoteFolder: '',
 };
 
@@ -164,7 +149,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
               const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
               title.textContent =
                 `Ctrl/⌘+单击跳转到：${link}` +
-                (this.settings.dblclickFocus ? '\n双击：聚焦此分支，再双击返回全图' : '');
+                '';
               g.appendChild(title);
             }
           }
@@ -335,7 +320,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     }
   }
 
-  /** 渲染后增强：节点跳转 + 双击聚焦 */
+  /** 渲染后增强：节点跳转等交互 */
   private enhanceDiagram(
     wrapper: HTMLElement,
     links: Map<string, NodeLink>,
@@ -372,7 +357,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
         if (byText) id = byText;
       }
       if (id) {
-        knownIds.add(id); // 所有可识别节点都纳入，供聚焦/钻取管理显隐
+        knownIds.add(id); // 所有可识别节点都纳入管理
         if (links.has(id)) idOf.set(g, id); // 只有带链接的节点才绑定跳转
       }
     });
@@ -876,7 +861,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
           const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
           title.textContent =
             (exists ? `Ctrl/⌘+单击跳转到：${link.target}` : `Ctrl/⌘+单击跳转到：${link.target}（笔记不存在，将自动创建）`) +
-            (this.settings.dblclickFocus ? '\n双击：聚焦此分支，再双击返回全图' : '');
+            '';
           g.appendChild(title);
         }
 
@@ -912,7 +897,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
               const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
               title.textContent =
                 `Ctrl/⌘+单击跳转到：${link.target}` +
-                (this.settings.dblclickFocus ? '\n双击：聚焦此分支，再双击返回全图' : '');
+                '';
               g.appendChild(title);
             }
           }
@@ -1007,7 +992,7 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('接管原生 mermaid 代码块')
-      .setDesc('开启后，普通 ```mermaid 代码块也由本插件渲染（节点链接/聚焦生效）；关闭时请使用 ```mermaid-link 代码块。修改此项需重新加载插件。')
+      .setDesc('开启后，普通 ```mermaid 代码块也由本插件渲染（节点跳转/定位生效）；关闭时请使用 ```mermaid-link 代码块。修改此项需重新加载插件。')
       .addToggle((toggle) =>
         toggle.setValue(this.plugin.settings.overrideNative).onChange(async (v) => {
           this.plugin.settings.overrideNative = v;
@@ -1060,70 +1045,6 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.openMode)
           .onChange(async (v) => {
             this.plugin.settings.openMode = v as OpenMode;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl).setName('交互').setHeading();
-
-    new Setting(containerEl)
-      .setName('双击节点聚焦分支')
-      .setDesc('双击节点放大显示其下游分支（保留上游路径），再次双击该节点或双击空白处恢复全图，Esc 也可恢复。')
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.dblclickFocus).onChange(async (v) => {
-          this.plugin.settings.dblclickFocus = v;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName('聚焦时保留上游路径')
-      .setDesc('关闭后只显示聚焦节点及其下游，不显示祖先链。')
-      .addToggle((toggle) =>
-        toggle.setValue(this.plugin.settings.includeAncestors).onChange(async (v) => {
-          this.plugin.settings.includeAncestors = v;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName('单击/双击判定延时')
-      .setDesc(`当前 ${this.plugin.settings.clickDelayMs}ms。需要区分单击跳转与双击聚焦，数值过小可能误触。设为 0 且开启双击聚焦时不推荐。`)
-      .addSlider((slider) =>
-        slider
-          .setLimits(0, 500, 10)
-          .setValue(this.plugin.settings.clickDelayMs)
-          .setDynamicTooltip()
-          .onChange(async (v) => {
-            this.plugin.settings.clickDelayMs = v;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName('聚焦动画时长')
-      .setDesc(`当前 ${this.plugin.settings.zoomDuration}ms，设为 0 表示无动画直接切换。`)
-      .addSlider((slider) =>
-        slider
-          .setLimits(0, 800, 20)
-          .setValue(this.plugin.settings.zoomDuration)
-          .setDynamicTooltip()
-          .onChange(async (v) => {
-            this.plugin.settings.zoomDuration = v;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName('聚焦留白比例')
-      .setDesc(`当前 ${this.plugin.settings.zoomPaddingRatio.toFixed(2)}，数值越大节点周围越宽松。`)
-      .addSlider((slider) =>
-        slider
-          .setLimits(0, 0.5, 0.01)
-          .setValue(this.plugin.settings.zoomPaddingRatio)
-          .setDynamicTooltip()
-          .onChange(async (v) => {
-            this.plugin.settings.zoomPaddingRatio = v;
             await this.plugin.saveSettings();
           }),
       );

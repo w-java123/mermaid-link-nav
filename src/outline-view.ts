@@ -1,11 +1,10 @@
 /**
  * 流程图视图：把当前笔记大纲用 mermaid 渲染成 flowchart。
- * 单击节点跳转到笔记对应行（Ctrl/Cmd 新标签、Alt 分屏），双击节点聚焦分支。
+ * 单击节点跳转到笔记对应行（Ctrl/Cmd 新标签、Alt 分屏）。
  */
 import { ItemView, Menu, PaneType, TFile, WorkspaceLeaf, type App } from 'obsidian';
 import mermaid from 'mermaid';
 import type MermaidLinkNavPlugin from './main';
-import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeDiagram } from './diagram-edit';
@@ -20,13 +19,11 @@ export class OutlineFlowView extends ItemView {
   private activeFile: TFile | null = null;
   private direction: 'TB' | 'LR' = 'TB';
   private renderToken = 0;
-  private controller: DiagramFocusController | null = null;
   private panZoom: PanZoomController | null = null;
 
   private toolbar!: HTMLDivElement;
   private stage!: HTMLDivElement;
   private dirBtn!: HTMLButtonElement;
-  private resetBtn!: HTMLButtonElement;
 
   constructor(leaf: WorkspaceLeaf, plugin: MermaidLinkNavPlugin) {
     super(leaf);
@@ -59,25 +56,15 @@ export class OutlineFlowView extends ItemView {
       this.dirBtn.textContent = this.direction === 'TB' ? '切换为横向流程' : '切换为纵向流程';
       void this.render();
     });
-    this.resetBtn = this.toolbar.createEl('button', {
-      cls: 'mln-outline-btn',
-      text: '返回全图',
-    });
-    this.resetBtn.classList.add('mln-hidden');
-    this.resetBtn.addEventListener('click', () => this.controller?.restore());
     this.toolbar.createEl('button', { cls: 'mln-outline-btn', text: '刷新' }).addEventListener('click', () => {
       void this.render();
     });
     this.toolbar.createSpan({
       cls: 'mln-outline-hint',
-      text: 'Ctrl/⌘+单击查看详情 · 双击聚焦放大 · 滚轮缩放 · 拖动平移 · 右键更多',
+      text: 'Ctrl/⌘+单击查看详情 · 滚轮缩放 · 拖动平移 · 右键更多',
     });
 
     this.stage = this.contentEl.createDiv({ cls: 'mln-outline-stage' });
-    this.stage.tabIndex = -1;
-    this.stage.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape') this.controller?.restore();
-    });
 
     const first = this.app.workspace.getActiveFile();
     await this.setFile(first && first.extension === 'md' ? first : null);
@@ -95,8 +82,7 @@ export class OutlineFlowView extends ItemView {
   }
 
   async onClose(): Promise<void> {
-    this.controller?.dispose();
-    this.controller = null;
+    return;
   }
 
   private async setFile(file: TFile | null): Promise<void> {
@@ -126,11 +112,8 @@ export class OutlineFlowView extends ItemView {
 
   private async render(): Promise<void> {
     const token = ++this.renderToken;
-    this.controller?.dispose();
-    this.controller = null;
     this.panZoom?.dispose();
     this.panZoom = null;
-    this.resetBtn.classList.add('mln-hidden');
     this.stage.empty();
 
     const file = this.activeFile;
@@ -226,23 +209,6 @@ export class OutlineFlowView extends ItemView {
       this.panZoom = new PanZoomController(svg, {}, `outline:${this.activeFile.path}`);
     }
 
-    if (svg && this.plugin.settings.dblclickFocus) {
-      this.controller = new DiagramFocusController(svg, edges, {
-        renderId,
-        knownIds,
-        includeAncestors: this.plugin.settings.includeAncestors,
-        duration: this.plugin.settings.zoomDuration,
-        paddingRatio: this.plugin.settings.zoomPaddingRatio,
-        onFocusChange: (focused) => {
-          focused ? this.resetBtn.classList.remove('mln-hidden') : this.resetBtn.classList.add('mln-hidden');
-        },
-      });
-      svg.addEventListener('dblclick', (ev) => {
-        if (svg.dataset.mlnPan === '1') return;
-        if (!(ev.target as Element | null)?.closest('g.node')) this.controller?.restore();
-      });
-    }
-
     const hasChild = new Set(edges.map((e) => e.from));
     const s = this.plugin.settings;
     idOf.forEach((id, g) => {
@@ -256,9 +222,7 @@ export class OutlineFlowView extends ItemView {
 
       if (s.showTooltip) {
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-        title.textContent =
-          `Ctrl/⌘+单击查看详情（定位到第 ${line + 1} 行）` +
-          (s.dblclickFocus ? '\n双击：聚焦此分支，再双击返回全图' : '');
+        title.textContent = `Ctrl/⌘+单击查看详情（定位到第 ${line + 1} 行）`;
         g.appendChild(title);
       }
 
@@ -293,14 +257,6 @@ export class OutlineFlowView extends ItemView {
         menu.addItem((it) => it.setTitle('在右侧分屏打开').onClick(() => this.jumpTo(line, 'split')));
         menu.showAtMouseEvent(ev);
       });
-      if (this.controller) {
-        g.addEventListener('dblclick', (ev) => {
-          if (svg?.dataset.mlnPan === '1') return; // 拖动结束后的误触发
-          ev.preventDefault();
-          ev.stopPropagation();
-          this.controller?.toggle(id);
-        });
-      }
     });
   }
 }

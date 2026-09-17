@@ -1,7 +1,7 @@
 {
   "id": "mermaid-link-nav",
   "name": "Mermaid Link Navigator",
-  "version": "1.15.35",
+  "version": "1.15.36",
   "minAppVersion": "1.5.0",
   "description": "Mermaid flowchart nodes with [[note links]], Ctrl+click to open; right-click visual editing; canvas zoom/pan; current node locate; auto-sync links on rename.",
   "author": "w-java123",
