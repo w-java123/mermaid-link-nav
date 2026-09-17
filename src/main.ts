@@ -71,8 +71,8 @@ let renderSeq = 0;
 
 export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
-  /** 每个笔记的代码块计数器，用于生成稳定的 cacheKey */
-  private blockCounters = new Map<string, { index: number; time: number }>();
+  /** 每个渲染会话的代码块计数器，docId -> 当前索引 */
+  private blockCounters = new Map<string, number>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -153,12 +153,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     for (const lang of languages) {
       this.registerMarkdownCodeBlockProcessor(lang, (source, el, ctx) => {
-        const key = ctx.sourcePath;
-        const now = Date.now();
-        const prev = this.blockCounters.get(key);
-        // 超过 2 秒视为新的渲染会话，重置计数器
-        const idx = (!prev || now - prev.time > 2000) ? 1 : prev.index + 1;
-        this.blockCounters.set(key, { index: idx, time: now });
+        // 用 docId 区分渲染会话，同一会话内代码块按顺序编号，每次渲染都从 1 开始
+        const docId = (ctx as unknown as { docId?: string }).docId ?? ctx.sourcePath;
+        const idx = (this.blockCounters.get(docId) ?? 0) + 1;
+        this.blockCounters.set(docId, idx);
         void this.renderBlock(source, el, ctx, idx);
       });
     }
