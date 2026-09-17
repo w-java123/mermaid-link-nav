@@ -242,3 +242,8 @@
 }
 .mln-hint-bold { font-weight: 600; }
 .mln-noselect { user-select: none; }
+
+/* 当前节点高亮光晕 */
+.mln-current-node {
+  filter: drop-shadow(0 0 6px rgba(233, 49, 71, 0.75));
+}

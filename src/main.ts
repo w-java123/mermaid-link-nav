@@ -83,6 +83,28 @@ function setHintText(hint: HTMLElement, text: string, redWord: string): void {
 }
 
 /** 当前选中节点的 localStorage key */
+
+/** 当前节点高亮色（与红色选择按钮一致） */
+const CURRENT_NODE_COLOR = '#e93147';
+
+/** 应用当前节点高亮：红色粗描边 + 光晕 */
+function applyCurrentNodeHighlight(nodeG: SVGGElement): void {
+  nodeG.classList.add('mln-current-node');
+  nodeG.querySelectorAll<SVGElement>('rect, path, circle, polygon, ellipse').forEach((shape) => {
+    shape.style.stroke = CURRENT_NODE_COLOR;
+    shape.style.strokeWidth = '3px';
+  });
+}
+
+/** 清除当前节点高亮，恢复 mermaid 默认描边 */
+function clearCurrentNodeHighlight(nodeG: SVGGElement): void {
+  nodeG.classList.remove('mln-current-node');
+  nodeG.querySelectorAll<SVGElement>('rect, path, circle, polygon, ellipse').forEach((shape) => {
+    shape.style.stroke = '';
+    shape.style.strokeWidth = '';
+  });
+}
+
 const CURRENT_NODE_KEY = 'mermaid-link-nav:current-node';
 
 /** 读取某笔记的当前选中节点 ID */
@@ -668,6 +690,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
         ev.stopPropagation();
         setCurrentNode(sourcePath, targetId);
         cleanup();
+        // 切换当前节点高亮：先清旧，再标新
+        nodeEls.forEach((g) => { if (g.classList.contains('mln-current-node')) clearCurrentNodeHighlight(g); });
+        applyCurrentNodeHighlight(targetG);
         // 更新按钮状态
         selectBtn.setText('重新选择当前正在执行的节点');
         if (!locateBtn) {
@@ -784,6 +809,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
         g.appendChild(title);
       }
     });
+    // 渲染时恢复当前节点高亮
+    if (currentNodeId) {
+      const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
+      if (curG) applyCurrentNodeHighlight(curG);
+    }
   }
 
   /** data-id 缺失时，用节点文本兜底匹配 */

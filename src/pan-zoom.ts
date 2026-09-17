@@ -161,13 +161,26 @@ export class PanZoomController {
   focusElement(el: SVGGElement): void {
     const bbox = el.getBBox();
     if (bbox.width === 0 || bbox.height === 0) return;
+    // 关键：mermaid 节点带 transform，getBBox() 返回的是节点局部坐标，
+    // 必须通过 getScreenCTM 转换到 svg 全局用户坐标，否则 viewBox 会定位到空白处（白屏）
+    const elCtm = el.getScreenCTM();
+    const svgCtm = this.svg.getScreenCTM();
+    if (!elCtm || !svgCtm) return;
+    const ctm = svgCtm.inverse().multiply(elCtm);
+    const p1 = new DOMPoint(bbox.x, bbox.y).matrixTransform(ctm);
+    const p2 = new DOMPoint(bbox.x + bbox.width, bbox.y + bbox.height).matrixTransform(ctm);
+    const gx = p1.x;
+    const gy = p1.y;
+    const gw = p2.x - p1.x;
+    const gh = p2.y - p1.y;
+    if (gw <= 0 || gh <= 0) return;
     // 目标视野：节点周围留 padding，放大到节点宽度的 3 倍
-    const padX = bbox.width * 1.0;
-    const padY = bbox.height * 1.5;
-    let targetW = bbox.width + padX * 2;
+    const padX = gw * 1.0;
+    const padY = gh * 1.5;
+    let targetW = gw + padX * 2;
     let targetH = targetW * this.ratio;
-    if (targetH < bbox.height + padY * 2) {
-      targetH = bbox.height + padY * 2;
+    if (targetH < gh + padY * 2) {
+      targetH = gh + padY * 2;
       targetW = targetH / this.ratio;
     }
     // 限制不超过最大缩放
@@ -177,14 +190,13 @@ export class PanZoomController {
       targetH = targetW * this.ratio;
     }
     const target: Box = {
-      x: bbox.x + bbox.width / 2 - targetW / 2,
-      y: bbox.y + bbox.height / 2 - targetH / 2,
+      x: gx + gw / 2 - targetW / 2,
+      y: gy + gh / 2 - targetH / 2,
       width: targetW,
       height: targetH,
     };
     this.animateTo(target);
   }
-
   /** 以屏幕坐标为中心缩放 */
   private zoomAt(clientX: number, clientY: number, factor: number): void {
     const rect = this.svg.getBoundingClientRect();
