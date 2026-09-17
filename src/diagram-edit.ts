@@ -329,7 +329,13 @@ export function setParent(source: string, nodeId: string, parentId: string): str
 /** 删除指定节点及其所有相关连线 */
 export function deleteNode(source: string, nodeId: string): string {
   const parsed = parseDiagram(source);
-  if (!parsed.nodes.find((n) => n.id === nodeId)) return source;
+  const hasNode = parsed.nodes.some((n) => n.id === nodeId)
+    || parsed.edges.some((e) => e.from === nodeId || e.to === nodeId);
+  if (!hasNode) return source;
+
+  // 记录入边源和出边目标，删除后把入边源连到出边目标
+  const incomingSources = parsed.edges.filter((e) => e.to === nodeId).map((e) => e.from);
+  const outgoingTargets = parsed.edges.filter((e) => e.from === nodeId).map((e) => e.to);
 
   const idEsc = nodeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const lines = source.split('\n');
@@ -375,7 +381,30 @@ export function deleteNode(source: string, nodeId: string): string {
       result.push(prefix.trimEnd());
     }
   }
-  return result.join('\n').replace(/\n{3,}/g, '\n\n');
+
+  let newSource = result.join('\n').replace(/\n{3,}/g, '\n\n');
+
+  // 5. 把入边源连到出边目标（删除节点后，原来经过该节点的路径需要接上）
+  if (incomingSources.length > 0 && outgoingTargets.length > 0) {
+    const afterDelete = parseDiagram(newSource);
+    const existingEdges = new Set(afterDelete.edges.map((e) => `${e.from}-->${e.to}`));
+    const additions: string[] = [];
+    for (const from of incomingSources) {
+      for (const to of outgoingTargets) {
+        if (from === to) continue;
+        const key = `${from}-->${to}`;
+        if (!existingEdges.has(key)) {
+          additions.push(`${from} --> ${to}`);
+          existingEdges.add(key);
+        }
+      }
+    }
+    if (additions.length > 0) {
+      newSource = newSource.replace(/\s+$/, '') + '\n' + additions.join('\n') + '\n';
+    }
+  }
+
+  return newSource;
 }
 
 /**
