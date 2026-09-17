@@ -16,7 +16,7 @@ import { DiagramFocusController } from './focus-dom';
 import { PanZoomController } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
-import { addEdge, addNode, changeNodeShape, deleteNode, editNode, NODE_SHAPES, normalizeDiagram, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, swapNodes, updateNoteSource } from './diagram-edit';
+import { addEdge, addNode, changeDecisionTarget, changeNodeShape, deleteNode, editNode, NODE_SHAPES, normalizeDiagram, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, swapNodes, updateNoteSource } from './diagram-edit';
 import { NodeEditModal, NodeEditResult } from './edit-modal';
 import { OutlineFlowView, OUTLINE_VIEW_TYPE } from './outline-view';
 
@@ -296,6 +296,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
       }
     });
 
+    // 节点形状映射（用于判断是否为判断节点/菱形）
+    const nodeOpener = new Map<string, string>();
+    try {
+      const parsedForShape = parseDiagram(diagramSource);
+      for (const n of parsedForShape.nodes) nodeOpener.set(n.id, n.opener);
+    } catch { /* ignore */ }
+
     // 画布式平移缩放（滚轮缩放 / 拖动平移 / 触摸板手势）
     if (svg) {
       // 用笔记路径作为稳定 cacheKey，编辑节点/跳转返回后重新渲染仍能恢复视图状态
@@ -480,6 +487,36 @@ export default class MermaidLinkNavPlugin extends Plugin {
               document.addEventListener('keydown', onKey);
             }),
           );
+
+          // 如果当前是判断节点（菱形），提供更换是/否目标的选项
+          if (nodeOpener.get(nodeId) === '{') {
+            menu.addItem((item) =>
+              item.setTitle('更换【是】节点').onClick(async () => {
+                const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
+                const newTarget = await pickNode(
+                  `请点击选择新的【是】子节点（当前节点：${curLabel}，Esc 取消）`,
+                  '【是】', nodeId,
+                );
+                if (!newTarget) return;
+                const newSource = changeDecisionTarget(diagramSource, nodeId, 'yes', newTarget);
+                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                if (!ok) new Notice('更换【是】节点失败');
+              }),
+            );
+            menu.addItem((item) =>
+              item.setTitle('更换【否】节点').onClick(async () => {
+                const curLabel = link?.displayText ?? (g.textContent ?? '').trim();
+                const newTarget = await pickNode(
+                  `请点击选择新的【否】子节点（当前节点：${curLabel}，Esc 取消）`,
+                  '【否】', nodeId,
+                );
+                if (!newTarget) return;
+                const newSource = changeDecisionTarget(diagramSource, nodeId, 'no', newTarget);
+                const ok = await updateNoteSource(this.app, sourcePath, diagramSource, newSource);
+                if (!ok) new Notice('更换【否】节点失败');
+              }),
+            );
+          }
 
           // 移除父节点（删除所有入边）
           menu.addItem((item) =>

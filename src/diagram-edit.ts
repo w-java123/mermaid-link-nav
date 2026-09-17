@@ -386,6 +386,59 @@ export function setAsDecision(
   return result;
 }
 
+/** 更换判断节点的是/否目标，只修改对应分支，不影响另一个分支 */
+export function changeDecisionTarget(
+  source: string,
+  nodeId: string,
+  branch: 'yes' | 'no',
+  newTarget: string,
+): string {
+  if (nodeId === newTarget) return source;
+  source = normalizeDiagram(source);
+  const label = branch === 'yes' ? '是' : '否';
+  const otherLabel = branch === 'yes' ? '否' : '是';
+  const idEsc = nodeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // 找到当前的是/否目标
+  const currentRe = new RegExp(`${idEsc}\\s*-->\\s*\\|${label}\\|\\s*([A-Za-z_][\\w-]*)`);
+  const m = source.match(currentRe);
+  const oldTarget = m ? m[1] : null;
+
+  // 找到另一个分支的目标（用于更新隐形链接）
+  const otherRe = new RegExp(`${idEsc}\\s*-->\\s*\\|${otherLabel}\\|\\s*([A-Za-z_][\\w-]*)`);
+  const om = source.match(otherRe);
+  const otherTarget = om ? om[1] : null;
+
+  let result = source;
+  if (oldTarget) {
+    result = removeEdge(result, nodeId, oldTarget);
+  }
+  result = addLabeledEdge(result, nodeId, newTarget, label);
+
+  // 更新隐形链接：保持是/否目标同层
+  if (otherTarget && newTarget !== otherTarget) {
+    const oldEsc = oldTarget ? oldTarget.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+    const otherEsc = otherTarget.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let replaced = false;
+    if (oldEsc) {
+      const invisRe = new RegExp(`(?:^|\\n)\\s*${oldEsc}\\s*~~~\\s*${otherEsc}\\s*(?=\\n|$)`, 'm');
+      const invisRe2 = new RegExp(`(?:^|\\n)\\s*${otherEsc}\\s*~~~\\s*${oldEsc}\\s*(?=\\n|$)`, 'm');
+      if (invisRe.test(result)) {
+        result = result.replace(invisRe, `\n${newTarget} ~~~ ${otherTarget}\n`);
+        replaced = true;
+      } else if (invisRe2.test(result)) {
+        result = result.replace(invisRe2, `\n${otherTarget} ~~~ ${newTarget}\n`);
+        replaced = true;
+      }
+    }
+    if (!replaced) {
+      result = result.replace(/\s+$/, '') + `\n${newTarget} ~~~ ${otherTarget}\n`;
+    }
+  }
+
+  return result;
+}
+
 /** 替换节点的父节点：删除原有入边，建立 parentId --> nodeId */
 export function setParent(source: string, nodeId: string, parentId: string): string {
   if (nodeId === parentId) return source;
