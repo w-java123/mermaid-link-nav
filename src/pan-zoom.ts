@@ -152,7 +152,13 @@ export class PanZoomController {
     // 恢复之前的缩放/平移状态
     if (cacheKey) {
       const cached = viewBoxCache.get(cacheKey);
-      if (cached) this.writeBox(cached);
+      if (cached) {
+        this.writeBox(cached);
+      } else {
+        // 首次打开：立即保存当前视图，确保 mln-viewbox.json 存在并可被同步
+        viewBoxCache.set(cacheKey, { ...this.current });
+        saveCache();
+      }
       // 监听 viewBox 变化（包括聚焦动画），自动保存
       this.observer = new MutationObserver(() => {
         const b = this.readBox();
