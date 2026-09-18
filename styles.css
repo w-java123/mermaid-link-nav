@@ -21,11 +21,11 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  padding: 6px 8px;
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   max-width: min(420px, 96vw);
 }
 
