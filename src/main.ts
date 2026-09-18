@@ -247,17 +247,18 @@ export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
 
   onunload(): void {
-    // 退出 Obsidian 时保存当前笔记滚动位置到 localStorage
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (view && this.activeScrollSource) {
-      const sc = this.findScrollContainer(view);
-      if (sc) setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
-    }
+    this.saveCurrentScroll();
   }
 
   async onload(): Promise<void> {
     await this.loadSettings();
     stateApp = this.app;
+    // 窗口关闭前同步保存滚动位置（比 onunload 早，视图仍可用）
+    const onBeforeUnload = (): void => this.saveCurrentScroll();
+    window.addEventListener('beforeunload', onBeforeUnload);
+    this.register(() => window.removeEventListener('beforeunload', onBeforeUnload));
+    // 切换笔记/标签页时保存当前位置
+    this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.saveCurrentScroll()));
     await loadStateFile(this.app);
     await loadViewBoxFile(this.app);
     this.app.workspace.onLayoutReady(() => this.applyStateToAll());
@@ -1158,6 +1159,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
   private restoringScrollFor: string | null = null;
   /** 最近一次渲染的笔记路径（滚动保存时用它，避免多笔记串位置） */
   private activeScrollSource = '';
+  /** 缓存当前笔记的滚动容器引用（退出/切换时直接读 scrollTop，不需重新查找） */
+  private activeScrollEl: HTMLElement | null = null;
 
   /** 找视图的真实滚动容器（手机端 contentEl 本身可能不可滚动） */
   private findScrollContainer(view: MarkdownView): HTMLElement | null {
@@ -1183,20 +1186,24 @@ export default class MermaidLinkNavPlugin extends Plugin {
    */
   private restoreScrollPosition(sourcePath: string): void {
     const saved = getScrollPosition(sourcePath);
-    if (!saved || saved.top < 30) return; // 上次就在顶部，无需恢复
+    if (!saved || saved.top < 30) return;
     const ratio = saved.height > 0 ? saved.top / saved.height : 0;
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view) return;
+    if (!view) {
+      // 渲染时视图尚未激活，延迟重试一次
+      window.setTimeout(() => this.restoreScrollPosition(sourcePath), 200);
+      return;
+    }
     this.restoringScrollFor = sourcePath;
     const apply = (): void => {
       const sc = this.findScrollContainer(view);
       if (!sc || sc.scrollHeight <= 0) return;
       let target = Math.round(ratio * sc.scrollHeight);
       if (target < 0) target = 0;
-      if (Math.abs(sc.scrollTop - target) < 30) return; // 已在目标附近则不动
+      if (Math.abs(sc.scrollTop - target) < 30) return;
       sc.scrollTop = target;
+      console.log('[mln-scroll] restored', sourcePath, '->', target, '/', sc.scrollHeight);
     };
-    // 只校正 2 次：第一次等容器就绪，第二次等大图渲染完成；避免多次跳来跳去
     const timers = Platform.isMobile ? [100, 700] : [200];
     for (const t of timers) window.setTimeout(apply, t);
     window.setTimeout(() => {
@@ -1205,15 +1212,23 @@ export default class MermaidLinkNavPlugin extends Plugin {
   }
 
   /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */
+  /** 用缓存的容器引用保存当前滚动位置（退出/切换时调用，不依赖视图查找） */
+  private saveCurrentScroll(): void {
+    if (this.activeScrollSource && this.activeScrollEl) {
+      setScrollPosition(this.activeScrollSource, this.activeScrollEl.scrollTop, this.activeScrollEl.scrollHeight);
+    }
+  }
+
   private attachScrollSave(sourcePath: string): void {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const contentEl = view?.contentEl;
     if (!contentEl) return;
     this.activeScrollSource = sourcePath;
-    if (this.scrollWatched.has(contentEl)) return;
-    this.scrollWatched.add(contentEl);
-    const sc = this.findScrollContainer(view!);
+    const sc = this.findScrollContainer(view);
     if (!sc) return;
+    this.activeScrollEl = sc; // 每次渲染都更新容器引用
+    if (this.scrollWatched.has(contentEl)) return; // 只防重复挂监听
+    this.scrollWatched.add(contentEl);
     let saveTimer: number | undefined;
     const onScroll = (): void => {
       if (this.restoringScrollFor === this.activeScrollSource) return;
@@ -1223,12 +1238,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
       }, 400);
     };
     sc.addEventListener('scroll', onScroll, { passive: true });
-    // 切后台/退出时立即保存（localStorage 同步写入，不丢最后位置）
     const onHide = (): void => {
       if (document.hidden) {
         if (saveTimer) window.clearTimeout(saveTimer);
         if (this.restoringScrollFor !== this.activeScrollSource)
-          setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
+          this.saveCurrentScroll();
       }
     };
     document.addEventListener('visibilitychange', onHide);
