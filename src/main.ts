@@ -228,6 +228,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
     this.registerEvent(this.app.vault.on('create', (file) => {
       if (isStateFile(file.path)) onStateFileChange();
     }));
+    // 手机端 Obsidian 不会为外部文件变化触发 vault 事件（如 nut 同步写入），
+    // 用定时轮询兜底：内容变化时重新应用高亮
+    this.startStatePolling();
     this.registerProcessors();
     this.addSettingTab(new MermaidLinkNavSettingTab(this.app, this));
 
@@ -1073,6 +1076,26 @@ export default class MermaidLinkNavPlugin extends Plugin {
       const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
       if (curG) applyCurrentNodeHighlight(curG);
     }
+  }
+
+  /** 定时轮询状态文件：手机端 Obsidian 不触发外部文件变化事件，需兜底检测 */
+  private startStatePolling(): void {
+    let lastRaw = '';
+    const poll = async (): Promise<void> => {
+      try {
+        const raw = await this.app.vault.adapter.read(CURRENT_NODE_FILE);
+        if (raw !== lastRaw) {
+          lastRaw = raw;
+          await loadStateFile(this.app);
+          this.applyStateToAll();
+        }
+      } catch {
+        // 文件尚不存在
+      }
+    };
+    const id = window.setInterval(() => void poll(), 15000);
+    this.register(() => window.clearInterval(id));
+    void poll();
   }
 
   /** 按 vault 状态文件重新应用所有已渲染图的高亮（跨设备同步后调用） */
