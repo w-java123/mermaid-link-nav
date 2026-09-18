@@ -155,7 +155,9 @@ async function loadStateFile(app: App): Promise<void> {
     const legacyRaw = localStorage.getItem(CURRENT_NODE_KEY);
     if (legacyRaw) {
       stateData = JSON.parse(legacyRaw) as Record<string, string>;
-      await app.vault.adapter.write(CURRENT_NODE_FILE, JSON.stringify(stateData));
+      try {
+        await app.vault.create(CURRENT_NODE_FILE, JSON.stringify(stateData));
+      } catch { /* ignore */ }
       return;
     }
   } catch { /* ignore */ }
@@ -180,9 +182,31 @@ function setCurrentNode(sourcePath: string, nodeId: string | null): void {
   try {
     localStorage.setItem(CURRENT_NODE_KEY, JSON.stringify(stateData));
   } catch { /* ignore */ }
-  if (stateApp) {
-    void stateApp.vault.adapter.write(CURRENT_NODE_FILE, JSON.stringify(stateData)).catch(() => {});
-  }
+  if (stateApp) persistState(stateApp);
+}
+
+/**
+ * 用 vault.modify / vault.create 写状态文件：会触发 Obsidian 的 vault 事件，
+ * nut 坚果云等"实时同步"依赖这些事件才能自动上传（adapter.write 不会触发）。
+ */
+function persistState(app: App): void {
+  const content = JSON.stringify(stateData ?? {});
+  const existing = app.vault.getAbstractFileByPath(CURRENT_NODE_FILE);
+  const doWrite = async (): Promise<void> => {
+    try {
+      if (existing instanceof TFile) {
+        await app.vault.modify(existing, content);
+      } else {
+        await app.vault.create(CURRENT_NODE_FILE, content);
+      }
+    } catch {
+      // 写入失败时降级为底层 adapter 写入
+      try {
+        await app.vault.adapter.write(CURRENT_NODE_FILE, content);
+      } catch { /* ignore */ }
+    }
+  };
+  void doWrite();
 }
 
 export default class MermaidLinkNavPlugin extends Plugin {
