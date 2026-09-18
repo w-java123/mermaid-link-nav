@@ -221,7 +221,7 @@ function persistState(app: App): void {
  * 手机端 Obsidian 重启后不恢复笔记滚动位置（回到顶部），此机制解决该问题。
  */
 const SCROLL_FILE = 'mln-scroll.json';
-let scrollData: Record<string, number> | null = null;
+let scrollData: Record<string, ScrollPos | number> | null = null;
 let scrollApp: App | null = null;
 
 /** 启动时从 vault 文件加载滚动位置缓存 */
@@ -234,7 +234,7 @@ async function loadScrollFile(app: App): Promise<void> {
   }
 }
 
-function getScrollPosition(sourcePath: string): number | null {
+function getScrollPosition(sourcePath: string): ScrollPos | number | null {
   return scrollData?.[sourcePath] ?? null;
 }
 
@@ -262,12 +262,13 @@ function persistScroll(): void {
   void doWrite();
 }
 
+interface ScrollPos { top: number; height: number; }
 let scrollSaveTimer: number | undefined;
-function setScrollPosition(sourcePath: string, top: number): void {
+function setScrollPosition(sourcePath: string, top: number, height: number): void {
   if (!scrollData) scrollData = {};
-  const prev = scrollData[sourcePath];
-  if (prev !== undefined && Math.abs(prev - top) < 50) return; // 微小变化不写
-  scrollData[sourcePath] = top;
+  const prev = scrollData[sourcePath] as ScrollPos | undefined;
+  if (prev && Math.abs(prev.top - top) < 50) return; // 微小变化不写
+  scrollData[sourcePath] = { top, height };
   if (scrollSaveTimer) window.clearTimeout(scrollSaveTimer);
   scrollSaveTimer = window.setTimeout(persistScroll, 300);
 }
@@ -1187,22 +1188,36 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
   /** 已挂滚动监听的视图容器（避免重复挂载） */
   private readonly scrollWatched = new WeakSet<HTMLElement>();
+  /** 恢复期间暂停保存，避免把恢复过程的中间值（被 clamp 的）写回文件 */
+  private restoringScroll = false;
 
-  /** 渲染完成后恢复笔记滚动位置（手机端 Obsidian 重启回到顶部的问题） */
+  /** 渲染完成后按比例恢复笔记滚动位置（页面高度渲染前后不同，绝对像素会被夹紧） */
   private restoreScrollPosition(sourcePath: string): void {
-    const target = getScrollPosition(sourcePath);
-    if (target == null) return;
+    const saved = getScrollPosition(sourcePath) as ScrollPos | number | null;
+    if (saved == null) return;
+    const savedTop = typeof saved === 'number' ? saved : saved.top;
+    const savedHeight = typeof saved === 'number' ? 0 : saved.height;
+    const ratio = savedHeight > 0 ? savedTop / savedHeight : 0;
+    if (this.restoringScroll) return;
+    this.restoringScroll = true;
     const apply = (): void => {
       const view = this.app.workspace.getActiveViewOfType(MarkdownView);
       const el = view?.contentEl;
       if (!el) return;
       const sc = (el as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl ?? el;
+      if (sc.scrollHeight <= 0) return;
+      let target = Math.round(ratio * sc.scrollHeight);
+      if (target < 0) target = 0;
       sc.scrollTop = target;
+      // 若被浏览器夹紧，立即再设一次
+      if (sc.scrollTop !== target && sc.scrollHeight > 0) sc.scrollTop = target;
     };
     // 多次尝试：等待图片/SVG 布局稳定后再设置
     window.setTimeout(apply, 150);
     window.setTimeout(apply, 600);
     window.setTimeout(apply, 1500);
+    window.setTimeout(apply, 3000);
+    window.setTimeout(() => { this.restoringScroll = false; }, 3400);
   }
 
   /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */
@@ -1213,12 +1228,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
     this.scrollWatched.add(contentEl);
     const sc = (contentEl as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl ?? contentEl;
     const onScroll = (): void => {
-      setScrollPosition(sourcePath, sc.scrollTop);
+      if (this.restoringScroll) return; // 恢复过程不保存
+      setScrollPosition(sourcePath, sc.scrollTop, sc.scrollHeight);
     };
     sc.addEventListener('scroll', onScroll, { passive: true });
     const onHide = (): void => {
       if (document.hidden) {
-        setScrollPosition(sourcePath, sc.scrollTop);
+        if (!this.restoringScroll) setScrollPosition(sourcePath, sc.scrollTop, sc.scrollHeight);
         flushScrollSave();
       }
     };
