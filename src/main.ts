@@ -216,14 +216,81 @@ function persistState(app: App): void {
   void doWrite();
 }
 
+/**
+ * 笔记滚动位置持久化到 vault 文件（mln-scroll.json）：
+ * 手机端 Obsidian 重启后不恢复笔记滚动位置（回到顶部），此机制解决该问题。
+ */
+const SCROLL_FILE = 'mln-scroll.json';
+let scrollData: Record<string, number> | null = null;
+let scrollApp: App | null = null;
+
+/** 启动时从 vault 文件加载滚动位置缓存 */
+async function loadScrollFile(app: App): Promise<void> {
+  try {
+    const raw = await app.vault.adapter.read(SCROLL_FILE);
+    scrollData = JSON.parse(raw) as Record<string, number>;
+  } catch {
+    scrollData = {};
+  }
+}
+
+function getScrollPosition(sourcePath: string): number | null {
+  return scrollData?.[sourcePath] ?? null;
+}
+
+/** 保存某笔记的滚动位置到 vault 文件（触发 Obsidian 事件，nut 可同步） */
+function persistScroll(): void {
+  if (!scrollApp || !scrollData) return;
+  const existing = scrollApp.vault.getAbstractFileByPath(SCROLL_FILE);
+  const doWrite = async (): Promise<void> => {
+    try {
+      if (existing instanceof TFile) {
+        await scrollApp!.vault.modify(existing, JSON.stringify(scrollData));
+      } else {
+        try {
+          await scrollApp!.vault.create(SCROLL_FILE, JSON.stringify(scrollData));
+        } catch {
+          const f2 = scrollApp!.vault.getAbstractFileByPath(SCROLL_FILE);
+          if (f2 instanceof TFile) await scrollApp!.vault.modify(f2, JSON.stringify(scrollData));
+          else throw new Error('cannot create scroll file');
+        }
+      }
+    } catch {
+      try { await scrollApp!.vault.adapter.write(SCROLL_FILE, JSON.stringify(scrollData)); } catch { /* ignore */ }
+    }
+  };
+  void doWrite();
+}
+
+let scrollSaveTimer: number | undefined;
+function setScrollPosition(sourcePath: string, top: number): void {
+  if (!scrollData) scrollData = {};
+  const prev = scrollData[sourcePath];
+  if (prev !== undefined && Math.abs(prev - top) < 50) return; // 微小变化不写
+  scrollData[sourcePath] = top;
+  if (scrollSaveTimer) window.clearTimeout(scrollSaveTimer);
+  scrollSaveTimer = window.setTimeout(persistScroll, 300);
+}
+
+/** 应用退出/切后台时立即保存，避免防抖丢失最后位置 */
+function flushScrollSave(): void {
+  if (scrollSaveTimer) {
+    window.clearTimeout(scrollSaveTimer);
+    scrollSaveTimer = undefined;
+    persistScroll();
+  }
+}
+
 export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
 
   async onload(): Promise<void> {
     await this.loadSettings();
     stateApp = this.app;
+    scrollApp = this.app;
     await loadStateFile(this.app);
     await loadViewBoxFile(this.app);
+    await loadScrollFile(this.app);
     this.app.workspace.onLayoutReady(() => this.applyStateToAll());
     // nut 坚果云等文件同步把当前节点状态同步过来后，重新应用高亮
     const onStateFileChange = (): void => {
@@ -242,9 +309,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
     // 视图位置文件被 nut 同步更新后，重新加载缓存（下次渲染/打开生效）
     this.registerEvent(this.app.vault.on('modify', (file) => {
       if (file.path === VIEWBOX_FILE) void loadViewBoxFile(this.app);
+      if (file.path === SCROLL_FILE) void loadScrollFile(this.app);
     }));
     this.registerEvent(this.app.vault.on('create', (file) => {
       if (file.path === VIEWBOX_FILE) void loadViewBoxFile(this.app);
+      if (file.path === SCROLL_FILE) void loadScrollFile(this.app);
     }));
     this.registerProcessors();
     this.addSettingTab(new MermaidLinkNavSettingTab(this.app, this));
@@ -1091,6 +1160,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
       const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
       if (curG) applyCurrentNodeHighlight(curG);
     }
+    // 渲染完成后恢复笔记滚动位置（手机端 Obsidian 重启回到顶部问题）
+    this.restoreScrollPosition(sourcePath);
+    this.attachScrollSave(sourcePath);
   }
 
   /** 定时轮询状态文件：手机端 Obsidian 不触发外部文件变化事件，需兜底检测 */
@@ -1111,6 +1183,50 @@ export default class MermaidLinkNavPlugin extends Plugin {
     const id = window.setInterval(() => void poll(), 15000);
     this.register(() => window.clearInterval(id));
     void poll();
+  }
+
+  /** 已挂滚动监听的视图容器（避免重复挂载） */
+  private readonly scrollWatched = new WeakSet<HTMLElement>();
+
+  /** 渲染完成后恢复笔记滚动位置（手机端 Obsidian 重启回到顶部的问题） */
+  private restoreScrollPosition(sourcePath: string): void {
+    const target = getScrollPosition(sourcePath);
+    if (target == null) return;
+    const apply = (): void => {
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      const el = view?.contentEl;
+      if (!el) return;
+      const sc = (el as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl ?? el;
+      sc.scrollTop = target;
+    };
+    // 多次尝试：等待图片/SVG 布局稳定后再设置
+    window.setTimeout(apply, 150);
+    window.setTimeout(apply, 600);
+    window.setTimeout(apply, 1500);
+  }
+
+  /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */
+  private attachScrollSave(sourcePath: string): void {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const contentEl = view?.contentEl;
+    if (!contentEl || this.scrollWatched.has(contentEl)) return;
+    this.scrollWatched.add(contentEl);
+    const sc = (contentEl as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl ?? contentEl;
+    const onScroll = (): void => {
+      setScrollPosition(sourcePath, sc.scrollTop);
+    };
+    sc.addEventListener('scroll', onScroll, { passive: true });
+    const onHide = (): void => {
+      if (document.hidden) {
+        setScrollPosition(sourcePath, sc.scrollTop);
+        flushScrollSave();
+      }
+    };
+    document.addEventListener('visibilitychange', onHide);
+    this.register(() => {
+      sc.removeEventListener('scroll', onScroll);
+      document.removeEventListener('visibilitychange', onHide);
+    });
   }
 
   /** 按 vault 状态文件重新应用所有已渲染图的高亮（跨设备同步后调用） */
