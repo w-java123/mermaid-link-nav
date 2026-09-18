@@ -102,7 +102,7 @@ function saveCache(): void {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch { /* ignore */ }
     persistViewBox();
-  }, 300);
+  }, 600);
 }
 
 // 模块加载时从 localStorage 恢复

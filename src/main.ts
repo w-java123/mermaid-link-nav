@@ -5,6 +5,7 @@ import {
   Menu,
   Notice,
   PaneType,
+  Platform,
   Plugin,
   PluginSettingTab,
   Setting,
@@ -267,10 +268,10 @@ let scrollSaveTimer: number | undefined;
 function setScrollPosition(sourcePath: string, top: number, height: number): void {
   if (!scrollData) scrollData = {};
   const prev = scrollData[sourcePath] as ScrollPos | undefined;
-  if (prev && Math.abs(prev.top - top) < 50) return; // 微小变化不写
+  if (prev && Math.abs(prev.top - top) < 80) return; // 微小变化不写（降频，减少 nut 同步上传）
   scrollData[sourcePath] = { top, height };
   if (scrollSaveTimer) window.clearTimeout(scrollSaveTimer);
-  scrollSaveTimer = window.setTimeout(persistScroll, 300);
+  scrollSaveTimer = window.setTimeout(persistScroll, 800);
 }
 
 /** 应用退出/切后台时立即保存，避免防抖丢失最后位置 */
@@ -1188,53 +1189,78 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
   /** 已挂滚动监听的视图容器（避免重复挂载） */
   private readonly scrollWatched = new WeakSet<HTMLElement>();
-  /** 恢复期间暂停保存，避免把恢复过程的中间值（被 clamp 的）写回文件 */
-  private restoringScroll = false;
+  /** 正在恢复滚动位置的笔记（恢复期间该笔记的滚动不保存，避免把恢复中间值写回） */
+  private restoringScrollFor: string | null = null;
+  /** 最近一次渲染的笔记路径（滚动保存时用它，避免多笔记串位置） */
+  private activeScrollSource = '';
 
-  /** 渲染完成后按比例恢复笔记滚动位置（页面高度渲染前后不同，绝对像素会被夹紧） */
+  /** 找视图的真实滚动容器（手机端 contentEl 本身可能不可滚动） */
+  private findScrollContainer(view: MarkdownView): HTMLElement | null {
+    const el = view.contentEl;
+    if (!el || !el.isConnected) return null;
+    const sc = (el as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl;
+    if (sc && sc.scrollHeight > sc.clientHeight) return sc;
+    if (el.scrollHeight > el.clientHeight) return el;
+    const inner = el.querySelector<HTMLElement>(
+      '.cm-scroller, .markdown-source-view .cm-contentContainer, .markdown-preview-view',
+    );
+    return inner ?? el;
+  }
+
+  /**
+   * 渲染完成后按比例恢复笔记滚动位置。
+   * 桌面端 Obsidian 自带滚动恢复，这里不干预（旧行为），避免反复设置导致加载变慢、位置被覆盖；
+   * 仅手机端（Obsidian 重启回到顶部）主动恢复。
+   */
   private restoreScrollPosition(sourcePath: string): void {
+    if (!Platform.isMobile) return;
     const saved = getScrollPosition(sourcePath) as ScrollPos | number | null;
     if (saved == null) return;
     const savedTop = typeof saved === 'number' ? saved : saved.top;
     const savedHeight = typeof saved === 'number' ? 0 : saved.height;
     const ratio = savedHeight > 0 ? savedTop / savedHeight : 0;
-    if (this.restoringScroll) return;
-    this.restoringScroll = true;
+    // 渲染时缓存视图引用：setTimeout 执行时用户可能已切换标签，不能事后取 active view
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view) return;
+    this.restoringScrollFor = sourcePath;
     const apply = (): void => {
-      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-      const el = view?.contentEl;
-      if (!el) return;
-      const sc = (el as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl ?? el;
+      const sc = this.findScrollContainer(view);
+      if (!sc) return;
       if (sc.scrollHeight <= 0) return;
       let target = Math.round(ratio * sc.scrollHeight);
       if (target < 0) target = 0;
+      // 偏差很小就不动，避免无谓跳动
+      if (Math.abs(sc.scrollTop - target) < 4) return;
       sc.scrollTop = target;
-      // 若被浏览器夹紧，立即再设一次
-      if (sc.scrollTop !== target && sc.scrollHeight > 0) sc.scrollTop = target;
     };
-    // 多次尝试：等待图片/SVG 布局稳定后再设置
-    window.setTimeout(apply, 150);
-    window.setTimeout(apply, 600);
-    window.setTimeout(apply, 1500);
-    window.setTimeout(apply, 3000);
-    window.setTimeout(() => { this.restoringScroll = false; }, 3400);
+    // 多次尝试：手机端大图渲染可能较慢，放宽窗口
+    const timers = [150, 500, 1000, 2000, 4000];
+    for (const t of timers) window.setTimeout(apply, t);
+    window.setTimeout(() => {
+      if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
+    }, 4500);
   }
 
   /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */
   private attachScrollSave(sourcePath: string): void {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const contentEl = view?.contentEl;
-    if (!contentEl || this.scrollWatched.has(contentEl)) return;
+    if (!contentEl) return;
+    // 同一视图容器可能在不同笔记间复用，WeakSet 防重挂但 sourcePath 每次渲染更新
+    this.activeScrollSource = sourcePath;
+    if (this.scrollWatched.has(contentEl)) return;
     this.scrollWatched.add(contentEl);
-    const sc = (contentEl as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl ?? contentEl;
+    const sc = this.findScrollContainer(view!);
+    if (!sc) return;
     const onScroll = (): void => {
-      if (this.restoringScroll) return; // 恢复过程不保存
-      setScrollPosition(sourcePath, sc.scrollTop, sc.scrollHeight);
+      if (this.restoringScrollFor === this.activeScrollSource) return; // 恢复过程不保存
+      setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
     };
     sc.addEventListener('scroll', onScroll, { passive: true });
     const onHide = (): void => {
       if (document.hidden) {
-        if (!this.restoringScroll) setScrollPosition(sourcePath, sc.scrollTop, sc.scrollHeight);
+        if (this.restoringScrollFor !== this.activeScrollSource)
+          setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
         flushScrollSave();
       }
     };
