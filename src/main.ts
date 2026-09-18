@@ -1165,11 +1165,19 @@ export default class MermaidLinkNavPlugin extends Plugin {
   /** 缓存当前笔记的滚动容器引用（退出/切换时直接读 scrollTop，不需重新查找） */
   private activeScrollEl: HTMLElement | null = null;
 
-  /** 获取滚动容器：用 Obsidian 官方 scrollContainerEl 属性（v1.15.49 验证可用） */
+  /** 获取滚动容器：优先用 Obsidian 官方 view.scrollContainerEl，兜底从 contentEl 向上找 */
   private getScrollEl(view: MarkdownView | null): HTMLElement | null {
-    const el = view?.contentEl;
-    if (!el) return null;
-    return (el as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl ?? el;
+    if (!view) return null;
+    // Obsidian 官方 API：MarkdownView.scrollContainerEl（注意是 view 的属性，不是 contentEl 的）
+    const sc = (view as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl;
+    if (sc && sc.isConnected) return sc;
+    // 兜底：从 contentEl 向上遍历找第一个真正滚动的容器
+    let el: HTMLElement | null = view.contentEl;
+    while (el) {
+      if (el.scrollHeight > el.clientHeight + 20) return el;
+      el = el.parentElement;
+    }
+    return view.contentEl;
   }
 
   /**
@@ -1188,9 +1196,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
     this.restoringScrollFor = sourcePath;
     const apply = (): void => {
       const sc = this.getScrollEl(view);
-      if (!sc) return;
-      if (Math.abs(sc.scrollTop - target) < 30) return; // 已在目标附近
+      if (!sc) { console.log('[mln-scroll] restore: no scroll container'); return; }
+      if (Math.abs(sc.scrollTop - target) < 30) { console.log('[mln-scroll] restore: already at', sc.scrollTop); return; }
       sc.scrollTop = target;
+      console.log('[mln-scroll] restored', sourcePath, 'target=', target, 'actual=', sc.scrollTop, 'scrollHeight=', sc.scrollHeight);
     };
     // 手机端 2 次校正（避免跳来跳去），桌面端 2 次
     const timers = Platform.isMobile ? [150, 700] : [200, 800];
@@ -1219,8 +1228,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
     if (this.scrollWatched.has(contentEl)) return;
     this.scrollWatched.add(contentEl);
     let saveTimer: number | undefined;
+    let loggedContainer = false;
     const onScroll = (): void => {
       if (this.restoringScrollFor === this.activeScrollSource) return;
+      if (!loggedContainer) {
+        console.log('[mln-scroll] save container:', sc.tagName, sc.className, 'scrollTop=', sc.scrollTop, 'scrollHeight=', sc.scrollHeight);
+        loggedContainer = true;
+      }
       if (saveTimer) window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
         setScrollPosition(this.activeScrollSource, sc.scrollTop);
