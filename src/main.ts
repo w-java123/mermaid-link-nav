@@ -1126,19 +1126,27 @@ export default class MermaidLinkNavPlugin extends Plugin {
         g.appendChild(title);
       }
     });
-    // 渲染时恢复当前节点高亮，并延迟滚动到该节点（重启后确保节点在屏幕可视区域）
+    // 渲染时恢复当前节点高亮
     if (currentNodeId) {
       const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
-      if (curG) {
-        applyCurrentNodeHighlight(curG);
-        // 等 viewBox 恢复和页面滚动恢复完成后，再把节点滚到屏幕中央
-        window.setTimeout(() => {
-          try { curG.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch { /* ignore */ }
-        }, 1200);
-      }
+      if (curG) applyCurrentNodeHighlight(curG);
     }
-    // 渲染完成后恢复笔记滚动位置（手机端 Obsidian 重启回到顶部问题）
-    this.restoreScrollPosition(sourcePath, wrapper);
+    // 恢复位置分两种情况：
+    // 1. 定位节点后退出（有pending标记）：直接scrollIntoView节点，不经过旧scrollTop，不闪
+    // 2. 手动移动后退出：恢复上次scrollTop
+    let locatePending = false;
+    try { locatePending = !!localStorage.getItem(`mln-locate-pending:${sourcePath}`); } catch { /* ignore */ }
+    if (locatePending && currentNodeId) {
+      const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
+      if (curG) {
+        try {
+          curG.scrollIntoView({ block: 'center', behavior: 'auto' });
+          localStorage.removeItem(`mln-locate-pending:${sourcePath}`);
+        } catch { /* ignore */ }
+      }
+    } else {
+      this.restoreScrollPosition(sourcePath, wrapper);
+    }
     this.attachScrollSave(sourcePath, wrapper);
   }
 
@@ -1197,7 +1205,6 @@ export default class MermaidLinkNavPlugin extends Plugin {
     if (this.restoredNotes.has(sourcePath)) return;
     this.restoredNotes.add(sourcePath);
     const target = getScrollPosition(sourcePath);
-    console.log('[mln-scroll] restore called', sourcePath, 'target=', target, 'wrapper=', wrapper ? 'yes' : 'no');
     if (target == null || target < 30) return;
     // 从 wrapper 向上找滚动容器（不依赖 getActiveViewOfType，避免分屏/双标签页拿错视图）
     let container = wrapper ? (wrapper.closest('.workspace-leaf-content') as HTMLElement | null) : null;
@@ -1211,26 +1218,12 @@ export default class MermaidLinkNavPlugin extends Plugin {
       return;
     }
     this.restoringScrollFor = sourcePath;
-    let attempts = 0;
-    const apply = (): void => {
-      if (Math.abs(container.scrollTop - target) < 30) {
-        console.log('[mln-scroll] restored OK', sourcePath, 'at', container.scrollTop);
-        return;
-      }
-      container.scrollTop = target;
-      attempts++;
-      console.log('[mln-scroll] restore attempt', attempts, sourcePath, 'target=', target, 'actual=', container.scrollTop, 'scrollHeight=', container.scrollHeight);
-      if (attempts < 3) {
-        window.setTimeout(() => {
-          if (Math.abs(container.scrollTop - target) >= 30) apply();
-        }, 100);
-      }
-    };
-    const timers = Platform.isMobile ? [200, 900] : [400, 1200];
-    for (const t of timers) window.setTimeout(apply, t);
+    // 立即设置（不闪），100ms 后验证一次：被 Obsidian 内建恢复覆盖则重设
+    container.scrollTop = target;
     window.setTimeout(() => {
+      if (Math.abs(container.scrollTop - target) >= 30) container.scrollTop = target;
       if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
-    }, Platform.isMobile ? 1200 : 1600);
+    }, 100);
   }
 
   /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */
@@ -1275,6 +1268,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
     let saveTimer: number | undefined;
     const onScroll = (): void => {
       if (this.restoringScrollFor === this.activeScrollSource) return;
+      // 用户手动滚动了，不再是定位pending状态
+      try { localStorage.removeItem(`mln-locate-pending:${this.activeScrollSource}`); } catch { /* ignore */ }
       if (saveTimer) window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
         setScrollPosition(this.activeScrollSource, sc.scrollTop);

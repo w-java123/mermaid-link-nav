@@ -271,7 +271,13 @@ export class PanZoomController {
           width: this.baseW,
           height: this.baseH,
         };
-    this.animateTo(target, 350, () => this.scrollNodeIntoView(el));
+    this.animateTo(target, 350, () => {
+      this.scrollNodeIntoView(el);
+      // 标记：本次退出是定位节点后退出，重启时直接回到节点位置（不经过旧scrollTop）
+      if (this.cacheKey) {
+        try { localStorage.setItem(`mln-locate-pending:${this.cacheKey}`, '1'); } catch { /* ignore */ }
+      }
+    });
   }
 
   /** Zoom around the screen point */
