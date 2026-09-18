@@ -1004,12 +1004,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
           if (!cid) return;
           const targetG = nodeEls.find((g) => idOf.get(g) === cid);
           if (targetG && panZoom) {
-            console.log('[mln-locate] button click, node=', cid);
             panZoom.focusElement(targetG);
             // 动画+滚动完成后立即保存 scrollTop（不等防抖，确保退出前已存好）
             window.setTimeout(() => {
               const container = findScrollContainer(wrapper);
-              console.log('[mln-locate] save timeout, container=', container ? container.tagName + '.' + container.className : 'no', 'scrollTop=', container?.scrollTop);
               if (container) setScrollPosition(sourcePath, container.scrollTop);
             }, 600);
           }
@@ -1222,7 +1220,6 @@ export default class MermaidLinkNavPlugin extends Plugin {
     if (this.restoredNotes.has(sourcePath)) return;
     this.restoredNotes.add(sourcePath);
     const target = getScrollPosition(sourcePath);
-    console.log('[mln-scroll] restore called', sourcePath, 'target=', target, 'wrapper=', wrapper ? 'yes' : 'no');
     if (target == null || target < 30) return;
     // 从 wrapper 向上找真正可滚动的容器（不硬编码 .workspace-leaf-content，Obsidian 里真正滚动的是 .markdown-preview-view）
     let container = wrapper ? findScrollContainer(wrapper) : null;
@@ -1236,10 +1233,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
       return;
     }
     this.restoringScrollFor = sourcePath;
-    console.log('[mln-scroll] restore container:', container.tagName, container.className, 'scrollH=', container.scrollHeight, 'clientH=', container.clientHeight);
     // 立即设置（不闪），100ms 后验证一次：被 Obsidian 内建恢复覆盖则重设
     container.scrollTop = target;
-    console.log('[mln-scroll] set scrollTop=', target, 'actual=', container.scrollTop);
     window.setTimeout(() => {
       if (Math.abs(container.scrollTop - target) >= 30) container.scrollTop = target;
       if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
@@ -1284,7 +1279,6 @@ export default class MermaidLinkNavPlugin extends Plugin {
     this.activeScrollEl = sc;
     if (this.scrollWatched.has(sc)) return;
     this.scrollWatched.add(sc);
-    console.log('[mln-scroll] attach save on', sc.tagName, sc.className, 'for', sourcePath);
     let saveTimer: number | undefined;
     const onScroll = (): void => {
       if (this.restoringScrollFor === this.activeScrollSource) return;

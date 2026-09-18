@@ -245,16 +245,13 @@ export class PanZoomController {
     try {
       const nodeRect = el.getBoundingClientRect();
       const container = this.findScrollContainer(el);
-      if (!container) { console.log('[mln-locate] no scroll container'); return; }
+      if (!container) return;
       const containerRect = container.getBoundingClientRect();
       const nodeOffset = nodeRect.top - containerRect.top + container.scrollTop;
       const target = Math.max(0, nodeOffset - container.clientHeight / 2 + nodeRect.height / 2);
-      console.log('[mln-locate] container:', container.tagName, container.className, 'scrollH=', container.scrollHeight, 'clientH=', container.clientHeight);
-      console.log('[mln-locate] scroll to', target, 'nodeOffset=', nodeOffset, 'scrollTop before=', container.scrollTop);
       container.scrollTop = target;
-      console.log('[mln-locate] scrollTop after=', container.scrollTop);
-    } catch (e) {
-      console.log('[mln-locate] scroll error', e);
+    } catch {
+      /* ignore */
     }
   }
 
