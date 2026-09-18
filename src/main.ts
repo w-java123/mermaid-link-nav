@@ -246,6 +246,28 @@ function setScrollPosition(sourcePath: string, top: number): void {
   }
 }
 
+/** 从元素向上遍历，找真正可滚动的容器（Obsidian 里 .workspace-leaf-content 通常 overflow:hidden，真正滚动的是 .markdown-preview-view/.view-content） */
+function findScrollContainer(el: Element | null): HTMLElement | null {
+  let cur: Element | null = el;
+  while (cur) {
+    if (cur instanceof HTMLElement) {
+      const style = window.getComputedStyle(cur);
+      const overflowY = style.overflowY;
+      if ((overflowY === 'auto' || overflowY === 'scroll') && cur.scrollHeight > cur.clientHeight + 5) {
+        return cur;
+      }
+    }
+    cur = cur.parentElement;
+  }
+  // 兜底：返回第一个 scrollHeight > clientHeight 的元素
+  cur = el;
+  while (cur) {
+    if (cur instanceof HTMLElement && cur.scrollHeight > cur.clientHeight + 5) return cur;
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
 export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
 
@@ -982,12 +1004,14 @@ export default class MermaidLinkNavPlugin extends Plugin {
           if (!cid) return;
           const targetG = nodeEls.find((g) => idOf.get(g) === cid);
           if (targetG && panZoom) {
+            console.log('[mln-locate] button click, node=', cid);
             panZoom.focusElement(targetG);
             // 动画+滚动完成后立即保存 scrollTop（不等防抖，确保退出前已存好）
             window.setTimeout(() => {
-              const container = wrapper.closest('.workspace-leaf-content') as HTMLElement | null;
+              const container = findScrollContainer(wrapper);
+              console.log('[mln-locate] save timeout, container=', container ? container.tagName + '.' + container.className : 'no', 'scrollTop=', container?.scrollTop);
               if (container) setScrollPosition(sourcePath, container.scrollTop);
-            }, 500);
+            }, 600);
           }
         });
       }
@@ -1198,12 +1222,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
     if (this.restoredNotes.has(sourcePath)) return;
     this.restoredNotes.add(sourcePath);
     const target = getScrollPosition(sourcePath);
+    console.log('[mln-scroll] restore called', sourcePath, 'target=', target, 'wrapper=', wrapper ? 'yes' : 'no');
     if (target == null || target < 30) return;
-    // 从 wrapper 向上找滚动容器（不依赖 getActiveViewOfType，避免分屏/双标签页拿错视图）
-    let container = wrapper ? (wrapper.closest('.workspace-leaf-content') as HTMLElement | null) : null;
+    // 从 wrapper 向上找真正可滚动的容器（不硬编码 .workspace-leaf-content，Obsidian 里真正滚动的是 .markdown-preview-view）
+    let container = wrapper ? findScrollContainer(wrapper) : null;
     if (!container) {
       const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-      container = view ? this.getScrollEl(view) : null;
+      container = view ? findScrollContainer(view.contentEl) : null;
     }
     if (!container) {
       this.restoredNotes.delete(sourcePath);
@@ -1211,8 +1236,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
       return;
     }
     this.restoringScrollFor = sourcePath;
+    console.log('[mln-scroll] restore container:', container.tagName, container.className, 'scrollH=', container.scrollHeight, 'clientH=', container.clientHeight);
     // 立即设置（不闪），100ms 后验证一次：被 Obsidian 内建恢复覆盖则重设
     container.scrollTop = target;
+    console.log('[mln-scroll] set scrollTop=', target, 'actual=', container.scrollTop);
     window.setTimeout(() => {
       if (Math.abs(container.scrollTop - target) >= 30) container.scrollTop = target;
       if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
@@ -1246,11 +1273,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
   }
 
   private attachScrollSave(sourcePath: string, wrapper?: HTMLElement): void {
-    // 从 wrapper 向上找滚动容器（不依赖 getActiveViewOfType，避免分屏/双标签页拿错视图）
-    let sc = wrapper ? (wrapper.closest('.workspace-leaf-content') as HTMLElement | null) : null;
+    // 从 wrapper 向上找真正可滚动的容器
+    let sc = wrapper ? findScrollContainer(wrapper) : null;
     if (!sc) {
       const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-      sc = view ? this.getScrollEl(view) : null;
+      sc = view ? findScrollContainer(view.contentEl) : null;
     }
     if (!sc) return;
     this.activeScrollSource = sourcePath;

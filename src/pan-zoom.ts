@@ -220,12 +220,41 @@ export class PanZoomController {
     this.rafId = requestAnimationFrame(step);
   }
 
-  /** 定位完成后立即滚动页面到节点（behavior:auto 不滑，确保 scrollTop 立即更新） */
+  /** 从元素向上遍历找真正可滚动的容器 */
+  private findScrollContainer(el: Element | null): HTMLElement | null {
+    let cur: Element | null = el;
+    while (cur) {
+      if (cur instanceof HTMLElement) {
+        const style = window.getComputedStyle(cur);
+        if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && cur.scrollHeight > cur.clientHeight + 5) {
+          return cur;
+        }
+      }
+      cur = cur.parentElement;
+    }
+    cur = el;
+    while (cur) {
+      if (cur instanceof HTMLElement && cur.scrollHeight > cur.clientHeight + 5) return cur;
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
+  /** 定位完成后直接计算节点位置并设置滚动容器 scrollTop */
   private scrollNodeIntoView(el: SVGGElement): void {
     try {
-      el.scrollIntoView({ block: 'center', behavior: 'auto' });
-    } catch {
-      /* ignore */
+      const nodeRect = el.getBoundingClientRect();
+      const container = this.findScrollContainer(el);
+      if (!container) { console.log('[mln-locate] no scroll container'); return; }
+      const containerRect = container.getBoundingClientRect();
+      const nodeOffset = nodeRect.top - containerRect.top + container.scrollTop;
+      const target = Math.max(0, nodeOffset - container.clientHeight / 2 + nodeRect.height / 2);
+      console.log('[mln-locate] container:', container.tagName, container.className, 'scrollH=', container.scrollHeight, 'clientH=', container.clientHeight);
+      console.log('[mln-locate] scroll to', target, 'nodeOffset=', nodeOffset, 'scrollTop before=', container.scrollTop);
+      container.scrollTop = target;
+      console.log('[mln-locate] scrollTop after=', container.scrollTop);
+    } catch (e) {
+      console.log('[mln-locate] scroll error', e);
     }
   }
 
