@@ -61,9 +61,17 @@ function persistViewBox(): void {
       if (existing instanceof TFile) {
         await viewBoxApp!.vault.modify(existing, JSON.stringify(data));
       } else {
-        await viewBoxApp!.vault.create(VIEWBOX_FILE, JSON.stringify(data));
+        try {
+          await viewBoxApp!.vault.create(VIEWBOX_FILE, JSON.stringify(data));
+        } catch {
+          // 文件可能已存在但 Obsidian 尚未索引：再查一次走 modify（触发事件）
+          const f2 = viewBoxApp!.vault.getAbstractFileByPath(VIEWBOX_FILE);
+          if (f2 instanceof TFile) await viewBoxApp!.vault.modify(f2, JSON.stringify(data));
+          else throw new Error('cannot create viewbox file');
+        }
       }
     } catch {
+      // 全部失败时降级为底层 adapter 写入（不触发事件，仅兜底）
       try { await viewBoxApp!.vault.adapter.write(VIEWBOX_FILE, JSON.stringify(data)); } catch { /* ignore */ }
     }
   };

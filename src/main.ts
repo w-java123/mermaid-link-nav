@@ -197,10 +197,17 @@ function persistState(app: App): void {
       if (existing instanceof TFile) {
         await app.vault.modify(existing, content);
       } else {
-        await app.vault.create(CURRENT_NODE_FILE, content);
+        try {
+          await app.vault.create(CURRENT_NODE_FILE, content);
+        } catch {
+          // 文件可能已存在但 Obsidian 尚未索引：再查一次走 modify（触发事件）
+          const f2 = app.vault.getAbstractFileByPath(CURRENT_NODE_FILE);
+          if (f2 instanceof TFile) await app.vault.modify(f2, content);
+          else throw new Error('cannot create state file');
+        }
       }
     } catch {
-      // 写入失败时降级为底层 adapter 写入
+      // 全部失败时降级为底层 adapter 写入（不触发事件，仅兜底）
       try {
         await app.vault.adapter.write(CURRENT_NODE_FILE, content);
       } catch { /* ignore */ }
