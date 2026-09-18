@@ -1235,8 +1235,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
       return;
     }
     this.restoringScrollFor = sourcePath;
-    // 立即设置（不闪），100ms 后验证一次：被 Obsidian 内建恢复覆盖则重设
-    container.scrollTop = target;
+    // 用 rAF 在布局完成后、浏览器绘制前设置 scrollTop（此时 scrollHeight 已够，不会被 clamp 到 0，用户看不到顶部）
+    requestAnimationFrame(() => {
+      container.scrollTop = target;
+    });
+    // 100ms 后验证：被 Obsidian 内建恢复覆盖则重设
     window.setTimeout(() => {
       if (Math.abs(container.scrollTop - target) >= 30) container.scrollTop = target;
       if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
