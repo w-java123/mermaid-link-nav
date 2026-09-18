@@ -265,10 +265,10 @@ function persistScroll(): void {
 
 interface ScrollPos { top: number; height: number; }
 let scrollSaveTimer: number | undefined;
-function setScrollPosition(sourcePath: string, top: number, height: number): void {
+function setScrollPosition(sourcePath: string, top: number, height: number, force = false): void {
   if (!scrollData) scrollData = {};
   const prev = scrollData[sourcePath] as ScrollPos | undefined;
-  if (prev && Math.abs(prev.top - top) < 80) return; // 微小变化不写（降频，减少 nut 同步上传）
+  if (!force && prev && Math.abs(prev.top - top) < 80) return; // 微小变化不写（降频，减少 nut 同步上传）
   scrollData[sourcePath] = { top, height };
   if (scrollSaveTimer) window.clearTimeout(scrollSaveTimer);
   scrollSaveTimer = window.setTimeout(persistScroll, 800);
@@ -285,6 +285,16 @@ function flushScrollSave(): void {
 
 export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
+
+  onunload(): void {
+    // 退出 Obsidian 时强制保存当前笔记滚动位置（防抖来不及的最后位置）
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (view && this.activeScrollSource) {
+      const sc = this.findScrollContainer(view);
+      if (sc) setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight, true);
+    }
+    flushScrollSave();
+  }
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -1198,13 +1208,17 @@ export default class MermaidLinkNavPlugin extends Plugin {
   private findScrollContainer(view: MarkdownView): HTMLElement | null {
     const el = view.contentEl;
     if (!el || !el.isConnected) return null;
-    const sc = (el as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl;
-    if (sc && sc.scrollHeight > sc.clientHeight) return sc;
-    if (el.scrollHeight > el.clientHeight) return el;
-    const inner = el.querySelector<HTMLElement>(
-      '.cm-scroller, .markdown-source-view .cm-contentContainer, .markdown-preview-view',
-    );
-    return inner ?? el;
+    // Obsidian 真正的滚动容器是 .workspace-leaf-content（contentEl 的祖先），
+    // 旧代码只看 contentEl 自身导致拿到视口元素、scrollTop 恒为 0
+    const leafContent = el.closest('.workspace-leaf-content') as HTMLElement | null;
+    if (leafContent && leafContent.scrollHeight > leafContent.clientHeight + 20) {
+      return leafContent;
+    }
+    // 源码模式 CodeMirror 滚动容器
+    const cm = el.querySelector<HTMLElement>('.cm-scroller');
+    if (cm && cm.scrollHeight > cm.clientHeight + 20) return cm;
+    if (el.scrollHeight > el.clientHeight + 20) return el;
+    return leafContent ?? el;
   }
 
   /**
@@ -1213,32 +1227,30 @@ export default class MermaidLinkNavPlugin extends Plugin {
    * 仅手机端（Obsidian 重启回到顶部）主动恢复。
    */
   private restoreScrollPosition(sourcePath: string): void {
-    if (!Platform.isMobile) return;
     const saved = getScrollPosition(sourcePath) as ScrollPos | number | null;
     if (saved == null) return;
     const savedTop = typeof saved === 'number' ? saved : saved.top;
     const savedHeight = typeof saved === 'number' ? 0 : saved.height;
+    if (savedTop < 30) return; // 上次就在顶部，无需恢复
     const ratio = savedHeight > 0 ? savedTop / savedHeight : 0;
-    // 渲染时缓存视图引用：setTimeout 执行时用户可能已切换标签，不能事后取 active view
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) return;
     this.restoringScrollFor = sourcePath;
     const apply = (): void => {
       const sc = this.findScrollContainer(view);
-      if (!sc) return;
-      if (sc.scrollHeight <= 0) return;
+      if (!sc || sc.scrollHeight <= 0) return;
       let target = Math.round(ratio * sc.scrollHeight);
       if (target < 0) target = 0;
-      // 偏差很小就不动，避免无谓跳动
-      if (Math.abs(sc.scrollTop - target) < 4) return;
+      // 已在目标附近（Obsidian 内建已恢复或偏差小）则不动，避免反复跳动
+      if (Math.abs(sc.scrollTop - target) < 30) return;
       sc.scrollTop = target;
     };
-    // 多次尝试：手机端大图渲染可能较慢，放宽窗口
-    const timers = [150, 500, 1000, 2000, 4000];
+    // 桌面端：Obsidian 内建通常会恢复，只补 2 次（内建没恢复时才生效）；手机端：多次等渲染
+    const timers = Platform.isMobile ? [150, 500, 1000, 2000, 4000] : [300, 1200];
     for (const t of timers) window.setTimeout(apply, t);
     window.setTimeout(() => {
       if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
-    }, 4500);
+    }, Platform.isMobile ? 4500 : 1500);
   }
 
   /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */

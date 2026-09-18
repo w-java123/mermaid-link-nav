@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<style>
+  body { margin: 0; background: #ffffff; width: 390px; }
+  #diagram { margin: 0 auto; }
+  #diagram svg { display: block; }
+</style>
+</head>
+<body>
+<div id="diagram" class="mermaid">
+%%{init: {"flowchart": {"curve": "linear"}}}%%
+flowchart TD
+  A["[[确定自己想找的工作岗位|确定岗位]]"] --> B["[[到BOSS直聘上搜索岗位|搜索岗位]]"]
+  B --> C["[[选择求职类型|选择求职类型]]"]
+  C --> N1["[[选择地区|选择地区]]"]
+  N1 --> D{"[[长沙岗位多吗|长沙岗位多？]]"}
+
+  D -->|是| G["[[去网上搜索需要学习哪些技术栈|搜索技术栈]]"]
+  D -->|否| E["[[地区选全国|选全国]]"]
+
+  E --> F{"[[全国岗位多且工资高吗|岗位多+工资高？]]"}
+  F -->|是| G
+  F -->|否| J["[[转Java后端开发岗|转Java后端]]"]
+
+  G --> H["[[学习这些技术栈|学习技术栈]]"]
+  H --> I["[[做几个有关这个岗位的【高质量但不离谱】的项目|选项目原则]]"]
+  J --> I
+
+  I --> K["[[选择要做的项目|选项目]]"]
+  K --> L{"[[有视频教程吗|有视频教程？]]"}
+
+  L -->|是| M["[[跟着视频教程跑通项目|跟视频跑通]]"]
+  L -->|否| N["[[找GitHub高星项目|找GitHub项目]]"]
+
+  N --> O["[[按quick start跑通项目|跑通项目]]"]
+  M --> P["[[按教程敲代码|敲代码]]"]
+  O --> P
+
+  P --> Q["[[搞明白项目的流程|搞懂流程]]"]
+  Q --> R{"[[时间充足吗|时间充足？]]"}
+
+  R -->|是| S["[[改造项目|改造项目]]"]
+  R -->|否| T["[[把项目上传GitHub|把项目上传GitHub]]"]
+  S --> T
+
+  T --> N2["[[写README.md文件|写README]]"]
+  N2 --> N3["[[按照quick start启动项目|按quick start启动]]"]
+  N3 --> V["[[配置.gitignore敏感信息|配.gitignore]]"]
+  V --> N4["[[删除LICENSE（开源证书）|删除LICENSE]]"]
+  N4 --> W{"[[项目没敲过代码吗|没敲过代码？]]"}
+
+  W -->|是| X["[[上传 GitHub 前的清理步骤|清理原作者提交记录]]"]
+  W -->|否| Y["[[项目上传GitHub设为private|上传仓库private]]"]
+  X --> Y
+
+  Y --> Z["[[加项目演示视频|加演示视频]]"]
+  Z --> AA["[[克隆项目到本地自检|克隆自检]]"]
+  AA --> AB["[[项目对应的GitHub仓库设为public|仓库设public]]"]
+  AB --> AC["[[找岗位相关简历参考|参考简历]]"]
+  AC --> AD["[[优化简历|优化简历]]"]
+  AD --> AE["[[搜集岗位对应的八股文|搜集八股文]]"]
+  AE --> AF["[[AI根据简历出面试题|AI出面试题]]"]
+
+  AF --> AG["[[每天记忆 八股文 + 面试题|每天记忆]]"]
+  AF --> N9["[[选择岗位名称|选择岗位名称]]"]
+  N9 --> N8["[[选择投递地区|选投递地区]]"]
+  N8 --> AI_NODE["[[海投前准备|准备海投]]"]
+
+  AI_NODE --> AP{"[[被风控了吗|被风控？]]"}
+  AP -->|是| AQ2["[[改为手动投递|手动投递]]"]
+  AP -->|否| AK["[[自动开始海投前准备|开始海投]]"]
+
+  AQ2 --> AL{"[[投150份后约面多吗？|约面多？]]"}
+  AK --> AL
+
+  AL -->|是| AQ["[[用免费的网站或者软件【模拟面试】|模拟面试]]"]
+  AL -->|否| AM{"[[检查投递岗位对不对|投递岗位正确？]]"}
+
+  AQ --> AR["[[正式面试要录音|正式面试]]"]
+  AR --> AS["[[根据录音复盘面试|复盘]]"]
+  AS --> AT["[[选公司顺序：1最优先|选公司]]"]
+
+  AM -->|是| AN["[[问HR不符合原因|问HR原因]]"]
+  AM -->|否| N5["[[修复自动投递插件|修复自动投递插件]]"]
+  AN ~~~ N5
+
+  AN --> N7{"[[HR回复了？|HR回复了？]]"}
+  N7 -->|是| N6["[[收集HR反馈|收集HR反馈]]"]
+  N7 -->|否| AO["[[改简历|改简历]]"]
+  N6 ~~~ AO
+
+  AO --> N10["[[更新BOSS直聘的【附件简历 + 在线简历】|更新简历]]"]
+  N10 --> AI_NODE
+
+  N5 --> N11{"[[插件修复了？|插件修复了？]]"}
+  N11 -->|是| AI_NODE
+  N11 -->|否| AQ2
+  AI_NODE ~~~ AQ2
+</div>
+<script src="file:///C:/Users/w/Doubao/chats/2026-09-14/new-chat/mermaid-link-nav/node_modules/mermaid/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose',
+    flowchart: { curve: 'basis', htmlLabels: true, useMaxWidth: true } });
+</script>
+</body>
+</html>
