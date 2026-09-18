@@ -250,14 +250,14 @@ export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
 
   onunload(): void {
-    this.saveCurrentScroll();
+    this.saveAllOpenNotesScroll();
   }
 
   async onload(): Promise<void> {
     await this.loadSettings();
     stateApp = this.app;
-    // 窗口关闭前同步保存滚动位置（比 onunload 早，视图仍可用）
-    const onBeforeUnload = (): void => this.saveCurrentScroll();
+    // 窗口关闭前同步保存所有打开笔记的滚动位置（比 onunload 早，视图仍可用）
+    const onBeforeUnload = (): void => this.saveAllOpenNotesScroll();
     window.addEventListener('beforeunload', onBeforeUnload);
     this.register(() => window.removeEventListener('beforeunload', onBeforeUnload));
     // 切换笔记/标签页时保存当前位置
@@ -1184,9 +1184,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
   }
 
   /**
-   * 渲染完成后按比例恢复笔记滚动位置。
-   * 桌面端 Obsidian 自带滚动恢复，这里不干预（旧行为），避免反复设置导致加载变慢、位置被覆盖；
-   * 仅手机端（Obsidian 重启回到顶部）主动恢复。
+   * 渲染完成后恢复笔记滚动位置（重启后回到上次退出位置）。
+   * 设完后验证是否生效，被 Obsidian 内建恢复覆盖则重设。
    */
   private restoreScrollPosition(sourcePath: string): void {
     if (this.restoredNotes.has(sourcePath)) return; // 同一会话已恢复过，编辑重渲染不再重置
@@ -1195,30 +1194,60 @@ export default class MermaidLinkNavPlugin extends Plugin {
     if (target == null || target < 30) return; // 上次在顶部，不恢复
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) {
+      this.restoredNotes.delete(sourcePath); // 允许重试
       window.setTimeout(() => this.restoreScrollPosition(sourcePath), 200);
       return;
     }
     this.restoringScrollFor = sourcePath;
+    let attempts = 0;
     const apply = (): void => {
       const sc = this.getScrollEl(view);
       if (!sc) { console.log('[mln-scroll] restore: no scroll container'); return; }
-      if (Math.abs(sc.scrollTop - target) < 30) { console.log('[mln-scroll] restore: already at', sc.scrollTop); return; }
+      if (Math.abs(sc.scrollTop - target) < 30) {
+        console.log('[mln-scroll] restored OK', sourcePath, 'at', sc.scrollTop);
+        return;
+      }
       sc.scrollTop = target;
-      console.log('[mln-scroll] restored', sourcePath, 'target=', target, 'actual=', sc.scrollTop, 'scrollHeight=', sc.scrollHeight);
+      attempts++;
+      console.log('[mln-scroll] restore attempt', attempts, sourcePath, 'target=', target, 'actual=', sc.scrollTop, 'scrollHeight=', sc.scrollHeight);
+      // 100ms 后验证：如果被 Obsidian 内建恢复覆盖了，重设一次（最多 3 次）
+      if (attempts < 3) {
+        window.setTimeout(() => {
+          if (Math.abs(sc.scrollTop - target) >= 30) apply();
+        }, 100);
+      }
     };
-    // 手机端 2 次校正（避免跳来跳去），桌面端 2 次
-    const timers = Platform.isMobile ? [150, 700] : [200, 800];
+    // 等 Obsidian 内建恢复完成后再设（桌面端内建恢复可能覆盖）
+    const timers = Platform.isMobile ? [200, 900] : [400, 1200];
     for (const t of timers) window.setTimeout(apply, t);
     window.setTimeout(() => {
       if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
-    }, Platform.isMobile ? 900 : 1000);
+    }, Platform.isMobile ? 1200 : 1600);
   }
 
   /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */
-  /** 用缓存的容器引用保存当前滚动位置（退出/切换时调用，不依赖视图查找） */
+  /** 用缓存的容器引用保存当前滚动位置（切换笔记时调用） */
   private saveCurrentScroll(): void {
     if (this.activeScrollSource && this.activeScrollEl) {
       setScrollPosition(this.activeScrollSource, this.activeScrollEl.scrollTop);
+    }
+  }
+
+  /** 退出时遍历所有打开的 MarkdownView 保存滚动位置（不依赖缓存容器，确保拿到正确值） */
+  private saveAllOpenNotesScroll(): void {
+    try {
+      const leaves = this.app.workspace.getLeavesOfType('markdown');
+      for (const leaf of leaves) {
+        const view = leaf.view as MarkdownView;
+        const path = view.file?.path;
+        if (!path) continue;
+        const sc = this.getScrollEl(view);
+        if (sc && sc.scrollTop > 0) {
+          setScrollPosition(path, sc.scrollTop);
+        }
+      }
+    } catch {
+      /* ignore */
     }
   }
 
