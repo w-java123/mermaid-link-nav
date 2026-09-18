@@ -11,4 +11,5 @@ node_modules/
 .t4.cjs
 .DS_Store
 AI_tests/
+AI_Success_Log/
 *.cjs
