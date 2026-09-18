@@ -282,15 +282,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
     const onBeforeUnload = (): void => this.saveAllOpenNotesScroll();
     window.addEventListener('beforeunload', onBeforeUnload);
     this.register(() => window.removeEventListener('beforeunload', onBeforeUnload));
-    // 切换笔记/标签页时保存当前位置，并清除新激活笔记的恢复标记（跳转回来后重新恢复位置）
-    this.registerEvent(this.app.workspace.on('active-leaf-change', (leaf) => {
-      this.saveCurrentScroll();
-      const view = leaf?.view;
-      if (view instanceof MarkdownView) {
-        const path = view.file?.path;
-        if (path) this.restoredNotes.delete(path);
-      }
-    }));
+    // 切换笔记/标签页时保存当前位置
+    this.registerEvent(this.app.workspace.on('active-leaf-change', () => this.saveCurrentScroll()));
     await loadStateFile(this.app);
     await loadViewBoxFile(this.app);
     this.app.workspace.onLayoutReady(() => this.applyStateToAll());
