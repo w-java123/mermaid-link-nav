@@ -1126,10 +1126,16 @@ export default class MermaidLinkNavPlugin extends Plugin {
         g.appendChild(title);
       }
     });
-    // 渲染时恢复当前节点高亮
+    // 渲染时恢复当前节点高亮，并延迟滚动到该节点（重启后确保节点在屏幕可视区域）
     if (currentNodeId) {
       const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
-      if (curG) applyCurrentNodeHighlight(curG);
+      if (curG) {
+        applyCurrentNodeHighlight(curG);
+        // 等 viewBox 恢复和页面滚动恢复完成后，再把节点滚到屏幕中央
+        window.setTimeout(() => {
+          try { curG.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch { /* ignore */ }
+        }, 1200);
+      }
     }
     // 渲染完成后恢复笔记滚动位置（手机端 Obsidian 重启回到顶部问题）
     this.restoreScrollPosition(sourcePath, wrapper);

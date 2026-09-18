@@ -220,17 +220,10 @@ export class PanZoomController {
     this.rafId = requestAnimationFrame(step);
   }
 
-  /** 定位完成后滚动页面，把节点带进可视区域（竖长图 svg 超出屏幕时必需） */
+  /** 定位完成后强制滚动页面，把节点带到屏幕正中央（确保 scrollTop 更新，重启后可恢复） */
   private scrollNodeIntoView(el: SVGGElement): void {
     try {
-      const r = el.getBoundingClientRect();
-      const vh = window.innerHeight || document.documentElement.clientHeight;
-      if (r.height === 0 || vh <= 0) return;
-      const cy = r.top + r.height / 2;
-      const margin = 90;
-      if (cy < margin || cy > vh - margin) {
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     } catch {
       /* ignore */
     }
