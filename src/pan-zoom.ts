@@ -1,3 +1,4 @@
+import { App, TFile } from 'obsidian';
 /**
  * 画布式平移与缩放控制器。
  *
@@ -28,13 +29,48 @@ interface Box {
   height: number;
 }
 
-/** localStorage 中存储 viewBox 缓存的 key */
+/** localStorage 中存储 viewBox 缓存的 key（兼容旧机制） */
 const STORAGE_KEY = 'mermaid-link-nav:viewBox-cache';
+/** vault 根目录的视图位置持久化文件：重启/跨设备恢复（nut 可同步到手机端） */
+export const VIEWBOX_FILE = 'mln-viewbox.json';
 
 /** 按 cacheKey 缓存每个流程图的 viewBox，跳转笔记返回/重启后恢复缩放/平移状态 */
 const viewBoxCache = new Map<string, Box>();
 
-/** 从 localStorage 加载缓存 */
+let viewBoxApp: App | null = null;
+
+/** 启动时从 vault 文件加载视图位置缓存 */
+export async function loadViewBoxFile(app: App): Promise<void> {
+  viewBoxApp = app;
+  try {
+    const raw = await app.vault.adapter.read(VIEWBOX_FILE);
+    const data = JSON.parse(raw) as Record<string, Box>;
+    viewBoxCache.clear();
+    for (const [k, v] of Object.entries(data)) viewBoxCache.set(k, v);
+  } catch { /* 文件不存在或损坏 */ }
+}
+
+/** 视图位置持久化到 vault 文件（用 vault API 以触发事件，nut 实时同步可自动上传） */
+function persistViewBox(): void {
+  if (!viewBoxApp) return;
+  const data: Record<string, Box> = {};
+  for (const [k, v] of viewBoxCache) data[k] = v;
+  const existing = viewBoxApp.vault.getAbstractFileByPath(VIEWBOX_FILE);
+  const doWrite = async (): Promise<void> => {
+    try {
+      if (existing instanceof TFile) {
+        await viewBoxApp!.vault.modify(existing, JSON.stringify(data));
+      } else {
+        await viewBoxApp!.vault.create(VIEWBOX_FILE, JSON.stringify(data));
+      }
+    } catch {
+      try { await viewBoxApp!.vault.adapter.write(VIEWBOX_FILE, JSON.stringify(data)); } catch { /* ignore */ }
+    }
+  };
+  void doWrite();
+}
+
+/** 从 localStorage 加载缓存（兼容旧机制） */
 function loadCache(): void {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -47,7 +83,7 @@ function loadCache(): void {
   } catch { /* ignore */ }
 }
 
-/** 保存缓存到 localStorage（防抖） */
+/** 保存缓存到 localStorage（防抖），同时持久化到 vault 文件 */
 let saveTimer: number | undefined;
 function saveCache(): void {
   if (saveTimer) window.clearTimeout(saveTimer);
@@ -57,6 +93,7 @@ function saveCache(): void {
       for (const [k, v] of viewBoxCache) data[k] = v;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch { /* ignore */ }
+    persistViewBox();
   }, 300);
 }
 

@@ -13,7 +13,7 @@ import {
   AbstractInputSuggest,
 } from 'obsidian';
 import mermaid from 'mermaid';
-import { PanZoomController } from './pan-zoom';
+import { PanZoomController, loadViewBoxFile, VIEWBOX_FILE } from './pan-zoom';
 import { extractNodeId } from './node-id';
 import { normalizeLabel, parseDiagram, type FlowEdge, type NodeLink } from './parser';
 import { addEdge, addNode, changeDecisionTarget, changeNodeShape, deleteNode, editNode, NODE_SHAPES, normalizeDiagram, removeIncomingEdges, removeOutgoingEdges, setAsDecision, setParent, swapNodes, updateNoteSource } from './diagram-edit';
@@ -216,6 +216,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     await this.loadSettings();
     stateApp = this.app;
     await loadStateFile(this.app);
+    await loadViewBoxFile(this.app);
     this.app.workspace.onLayoutReady(() => this.applyStateToAll());
     // nut 坚果云等文件同步把当前节点状态同步过来后，重新应用高亮
     const onStateFileChange = (): void => {
@@ -231,6 +232,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
     // 手机端 Obsidian 不会为外部文件变化触发 vault 事件（如 nut 同步写入），
     // 用定时轮询兜底：内容变化时重新应用高亮
     this.startStatePolling();
+    // 视图位置文件被 nut 同步更新后，重新加载缓存（下次渲染/打开生效）
+    this.registerEvent(this.app.vault.on('modify', (file) => {
+      if (file.path === VIEWBOX_FILE) void loadViewBoxFile(this.app);
+    }));
+    this.registerEvent(this.app.vault.on('create', (file) => {
+      if (file.path === VIEWBOX_FILE) void loadViewBoxFile(this.app);
+    }));
     this.registerProcessors();
     this.addSettingTab(new MermaidLinkNavSettingTab(this.app, this));
 
