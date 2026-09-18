@@ -319,7 +319,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
       // 单行压缩格式规范化后再渲染，避免 mermaid 11 解析/渲染崩溃（孤立节点定义夹在语句间）
       const renderCode = normalizeDiagram(parsed.code);
-      const result = await mermaid.render(renderId, renderCode, wrapper);
+      const result = await mermaid.render(renderId, renderCode);
       const svgDoc = new DOMParser().parseFromString(result.svg, 'image/svg+xml');
       wrapper.appendChild(svgDoc.documentElement);
       result.bindFunctions?.(wrapper);
@@ -347,7 +347,10 @@ export default class MermaidLinkNavPlugin extends Plugin {
     renderId: string,
     diagramSource: string,
   ): void {
-    const svg = wrapper.querySelector<SVGSVGElement>('svg');
+    // 只保留第一个 svg：mermaid.render 曾在传 container 时自动注入副本导致重影，这里兜底清理
+    const allSvg = wrapper.querySelectorAll<SVGSVGElement>('svg');
+    allSvg.forEach((s, i) => { if (i > 0) s.remove(); });
+    const svg = allSvg[0] ?? null;
     const nodeEls = Array.from(wrapper.querySelectorAll<SVGGElement>('g.node'));
 
     // 手机端 WebView 不支持 svg height:auto 按 viewBox 比例推导（高度塌陷为 0），
