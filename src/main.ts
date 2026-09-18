@@ -121,23 +121,40 @@ function clearCurrentNodeHighlight(nodeG: SVGGElement): void {
  * localStorage 仅作文件尚未加载完成时的回退。
  */
 const CURRENT_NODE_KEY = 'mermaid-link-nav:current-node';
-const CURRENT_NODE_FILE = '.mln-current-node.json';
+const CURRENT_NODE_FILE = 'mln-current-node.json';
+/** 旧版隐藏文件名（部分同步工具会忽略 dot 文件，仅作兼容读取） */
+const CURRENT_NODE_FILE_LEGACY = '.mln-current-node.json';
 let stateData: Record<string, string> | null = null;
 let stateApp: App | null = null;
 
 /** 从 vault 文件加载当前节点状态；文件不存在时尝试迁移一次 localStorage 旧数据 */
 async function loadStateFile(app: App): Promise<void> {
+  let raw: string | null = null;
   try {
-    const raw = await app.vault.adapter.read(CURRENT_NODE_FILE);
-    stateData = JSON.parse(raw) as Record<string, string>;
-    return;
+    raw = await app.vault.adapter.read(CURRENT_NODE_FILE);
   } catch {
-    // 文件不存在或解析失败：尝试从 localStorage 迁移旧数据
+    /* 新文件名不存在 */
+  }
+  if (raw === null) {
+    // 兼容旧版 dot 文件名（可能被同步工具忽略，但手机端若已有旧文件仍能读到）
+    try {
+      raw = await app.vault.adapter.read(CURRENT_NODE_FILE_LEGACY);
+    } catch {
+      /* 旧文件名也不存在 */
+    }
+  }
+  if (raw !== null) {
+    try {
+      stateData = JSON.parse(raw) as Record<string, string>;
+      return;
+    } catch {
+      /* 解析失败，落到迁移逻辑 */
+    }
   }
   try {
-    const raw = localStorage.getItem(CURRENT_NODE_KEY);
-    if (raw) {
-      stateData = JSON.parse(raw) as Record<string, string>;
+    const legacyRaw = localStorage.getItem(CURRENT_NODE_KEY);
+    if (legacyRaw) {
+      stateData = JSON.parse(legacyRaw) as Record<string, string>;
       await app.vault.adapter.write(CURRENT_NODE_FILE, JSON.stringify(stateData));
       return;
     }
@@ -180,11 +197,12 @@ export default class MermaidLinkNavPlugin extends Plugin {
     const onStateFileChange = (): void => {
       void loadStateFile(this.app).then(() => this.applyStateToAll());
     };
+    const isStateFile = (p: string): boolean => p === CURRENT_NODE_FILE || p === CURRENT_NODE_FILE_LEGACY;
     this.registerEvent(this.app.vault.on('modify', (file) => {
-      if (file.path === CURRENT_NODE_FILE) onStateFileChange();
+      if (isStateFile(file.path)) onStateFileChange();
     }));
     this.registerEvent(this.app.vault.on('create', (file) => {
-      if (file.path === CURRENT_NODE_FILE) onStateFileChange();
+      if (isStateFile(file.path)) onStateFileChange();
     }));
     this.registerProcessors();
     this.addSettingTab(new MermaidLinkNavSettingTab(this.app, this));
