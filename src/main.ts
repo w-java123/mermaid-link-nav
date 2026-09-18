@@ -981,7 +981,14 @@ export default class MermaidLinkNavPlugin extends Plugin {
           const cid = getCurrentNode(sourcePath);
           if (!cid) return;
           const targetG = nodeEls.find((g) => idOf.get(g) === cid);
-          if (targetG && panZoom) panZoom.focusElement(targetG);
+          if (targetG && panZoom) {
+            panZoom.focusElement(targetG);
+            // 动画+滚动完成后立即保存 scrollTop（不等防抖，确保退出前已存好）
+            window.setTimeout(() => {
+              const container = wrapper.closest('.workspace-leaf-content') as HTMLElement | null;
+              if (container) setScrollPosition(sourcePath, container.scrollTop);
+            }, 500);
+          }
         });
       }
       if (!clearBtn) {
@@ -1131,22 +1138,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
       const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
       if (curG) applyCurrentNodeHighlight(curG);
     }
-    // 恢复位置分两种情况：
-    // 1. 定位节点后退出（有pending标记）：直接scrollIntoView节点，不经过旧scrollTop，不闪
-    // 2. 手动移动后退出：恢复上次scrollTop
-    let locatePending = false;
-    try { locatePending = !!localStorage.getItem(`mln-locate-pending:${sourcePath}`); } catch { /* ignore */ }
-    if (locatePending && currentNodeId) {
-      const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
-      if (curG) {
-        try {
-          curG.scrollIntoView({ block: 'center', behavior: 'auto' });
-          localStorage.removeItem(`mln-locate-pending:${sourcePath}`);
-        } catch { /* ignore */ }
-      }
-    } else {
-      this.restoreScrollPosition(sourcePath, wrapper);
-    }
+    // 恢复上次滚动位置（手动移动 / 定位节点后退出 统一走此路径：定位时已立即保存节点位置的scrollTop）
+    this.restoreScrollPosition(sourcePath, wrapper);
     this.attachScrollSave(sourcePath, wrapper);
   }
 
@@ -1268,8 +1261,6 @@ export default class MermaidLinkNavPlugin extends Plugin {
     let saveTimer: number | undefined;
     const onScroll = (): void => {
       if (this.restoringScrollFor === this.activeScrollSource) return;
-      // 用户手动滚动了，不再是定位pending状态
-      try { localStorage.removeItem(`mln-locate-pending:${this.activeScrollSource}`); } catch { /* ignore */ }
       if (saveTimer) window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
         setScrollPosition(this.activeScrollSource, sc.scrollTop);

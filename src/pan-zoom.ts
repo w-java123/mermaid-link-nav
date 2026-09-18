@@ -220,10 +220,10 @@ export class PanZoomController {
     this.rafId = requestAnimationFrame(step);
   }
 
-  /** 定位完成后强制滚动页面，把节点带到屏幕正中央（确保 scrollTop 更新，重启后可恢复） */
+  /** 定位完成后立即滚动页面到节点（behavior:auto 不滑，确保 scrollTop 立即更新） */
   private scrollNodeIntoView(el: SVGGElement): void {
     try {
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.scrollIntoView({ block: 'center', behavior: 'auto' });
     } catch {
       /* ignore */
     }
@@ -271,13 +271,7 @@ export class PanZoomController {
           width: this.baseW,
           height: this.baseH,
         };
-    this.animateTo(target, 350, () => {
-      this.scrollNodeIntoView(el);
-      // 标记：本次退出是定位节点后退出，重启时直接回到节点位置（不经过旧scrollTop）
-      if (this.cacheKey) {
-        try { localStorage.setItem(`mln-locate-pending:${this.cacheKey}`, '1'); } catch { /* ignore */ }
-      }
-    });
+    this.animateTo(target, 350, () => this.scrollNodeIntoView(el));
   }
 
   /** Zoom around the screen point */
