@@ -521,6 +521,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
     const svg = allSvg[0] ?? null;
     const nodeEls = Array.from(wrapper.querySelectorAll<SVGGElement>('g.node'));
 
+    // 立即恢复滚动位置（在浏览器绘制下一帧前设置，避免先显示顶部再跳过去的闪烁）
+    this.restoreScrollPosition(sourcePath, wrapper);
+
     // 手机端 WebView 不支持 svg height:auto 按 viewBox 比例推导（高度塌陷为 0），
     // 这里按 viewBox 比例显式计算并设置高度；窗口尺寸变化时重算。
     if (svg) {
@@ -1160,8 +1163,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
       const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
       if (curG) applyCurrentNodeHighlight(curG);
     }
-    // 恢复上次滚动位置（手动移动 / 定位节点后退出 统一走此路径：定位时已立即保存节点位置的scrollTop）
-    this.restoreScrollPosition(sourcePath, wrapper);
+    // 挂载滚动监听
     this.attachScrollSave(sourcePath, wrapper);
   }
 
