@@ -221,65 +221,25 @@ function persistState(app: App): void {
  * 笔记滚动位置持久化到 vault 文件（mln-scroll.json）：
  * 手机端 Obsidian 重启后不恢复笔记滚动位置（回到顶部），此机制解决该问题。
  */
-const SCROLL_FILE = 'mln-scroll.json';
-let scrollData: Record<string, ScrollPos | number> | null = null;
-let scrollApp: App | null = null;
+// 滚动位置用 localStorage（设备本地缓存，电脑/手机各自独立，不通过 nut 同步）
+const SCROLL_KEY_PREFIX = 'mln-scroll:';
 
-/** 启动时从 vault 文件加载滚动位置缓存 */
-async function loadScrollFile(app: App): Promise<void> {
+interface ScrollPos { top: number; height: number; }
+
+function getScrollPosition(sourcePath: string): ScrollPos | null {
   try {
-    const raw = await app.vault.adapter.read(SCROLL_FILE);
-    scrollData = JSON.parse(raw) as Record<string, number>;
+    const raw = localStorage.getItem(SCROLL_KEY_PREFIX + sourcePath);
+    return raw ? (JSON.parse(raw) as ScrollPos) : null;
   } catch {
-    scrollData = {};
+    return null;
   }
 }
 
-function getScrollPosition(sourcePath: string): ScrollPos | number | null {
-  return scrollData?.[sourcePath] ?? null;
-}
-
-/** 保存某笔记的滚动位置到 vault 文件（触发 Obsidian 事件，nut 可同步） */
-function persistScroll(): void {
-  if (!scrollApp || !scrollData) return;
-  const existing = scrollApp.vault.getAbstractFileByPath(SCROLL_FILE);
-  const doWrite = async (): Promise<void> => {
-    try {
-      if (existing instanceof TFile) {
-        await scrollApp!.vault.modify(existing, JSON.stringify(scrollData));
-      } else {
-        try {
-          await scrollApp!.vault.create(SCROLL_FILE, JSON.stringify(scrollData));
-        } catch {
-          const f2 = scrollApp!.vault.getAbstractFileByPath(SCROLL_FILE);
-          if (f2 instanceof TFile) await scrollApp!.vault.modify(f2, JSON.stringify(scrollData));
-          else throw new Error('cannot create scroll file');
-        }
-      }
-    } catch {
-      try { await scrollApp!.vault.adapter.write(SCROLL_FILE, JSON.stringify(scrollData)); } catch { /* ignore */ }
-    }
-  };
-  void doWrite();
-}
-
-interface ScrollPos { top: number; height: number; }
-let scrollSaveTimer: number | undefined;
-function setScrollPosition(sourcePath: string, top: number, height: number, force = false): void {
-  if (!scrollData) scrollData = {};
-  const prev = scrollData[sourcePath] as ScrollPos | undefined;
-  if (!force && prev && Math.abs(prev.top - top) < 80) return; // 微小变化不写（降频，减少 nut 同步上传）
-  scrollData[sourcePath] = { top, height };
-  if (scrollSaveTimer) window.clearTimeout(scrollSaveTimer);
-  scrollSaveTimer = window.setTimeout(persistScroll, 800);
-}
-
-/** 应用退出/切后台时立即保存，避免防抖丢失最后位置 */
-function flushScrollSave(): void {
-  if (scrollSaveTimer) {
-    window.clearTimeout(scrollSaveTimer);
-    scrollSaveTimer = undefined;
-    persistScroll();
+function setScrollPosition(sourcePath: string, top: number, height: number): void {
+  try {
+    localStorage.setItem(SCROLL_KEY_PREFIX + sourcePath, JSON.stringify({ top, height }));
+  } catch {
+    /* localStorage 不可用时忽略 */
   }
 }
 
@@ -287,22 +247,19 @@ export default class MermaidLinkNavPlugin extends Plugin {
   settings!: MermaidLinkNavSettings;
 
   onunload(): void {
-    // 退出 Obsidian 时强制保存当前笔记滚动位置（防抖来不及的最后位置）
+    // 退出 Obsidian 时保存当前笔记滚动位置到 localStorage
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (view && this.activeScrollSource) {
       const sc = this.findScrollContainer(view);
-      if (sc) setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight, true);
+      if (sc) setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
     }
-    flushScrollSave();
   }
 
   async onload(): Promise<void> {
     await this.loadSettings();
     stateApp = this.app;
-    scrollApp = this.app;
     await loadStateFile(this.app);
     await loadViewBoxFile(this.app);
-    await loadScrollFile(this.app);
     this.app.workspace.onLayoutReady(() => this.applyStateToAll());
     // nut 坚果云等文件同步把当前节点状态同步过来后，重新应用高亮
     const onStateFileChange = (): void => {
@@ -321,11 +278,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
     // 视图位置文件被 nut 同步更新后，重新加载缓存（下次渲染/打开生效）
     this.registerEvent(this.app.vault.on('modify', (file) => {
       if (file.path === VIEWBOX_FILE) void loadViewBoxFile(this.app);
-      if (file.path === SCROLL_FILE) void loadScrollFile(this.app);
     }));
     this.registerEvent(this.app.vault.on('create', (file) => {
       if (file.path === VIEWBOX_FILE) void loadViewBoxFile(this.app);
-      if (file.path === SCROLL_FILE) void loadScrollFile(this.app);
     }));
     this.registerProcessors();
     this.addSettingTab(new MermaidLinkNavSettingTab(this.app, this));
@@ -1227,12 +1182,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
    * 仅手机端（Obsidian 重启回到顶部）主动恢复。
    */
   private restoreScrollPosition(sourcePath: string): void {
-    const saved = getScrollPosition(sourcePath) as ScrollPos | number | null;
-    if (saved == null) return;
-    const savedTop = typeof saved === 'number' ? saved : saved.top;
-    const savedHeight = typeof saved === 'number' ? 0 : saved.height;
-    if (savedTop < 30) return; // 上次就在顶部，无需恢复
-    const ratio = savedHeight > 0 ? savedTop / savedHeight : 0;
+    const saved = getScrollPosition(sourcePath);
+    if (!saved || saved.top < 30) return; // 上次就在顶部，无需恢复
+    const ratio = saved.height > 0 ? saved.top / saved.height : 0;
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) return;
     this.restoringScrollFor = sourcePath;
@@ -1241,16 +1193,15 @@ export default class MermaidLinkNavPlugin extends Plugin {
       if (!sc || sc.scrollHeight <= 0) return;
       let target = Math.round(ratio * sc.scrollHeight);
       if (target < 0) target = 0;
-      // 已在目标附近（Obsidian 内建已恢复或偏差小）则不动，避免反复跳动
-      if (Math.abs(sc.scrollTop - target) < 30) return;
+      if (Math.abs(sc.scrollTop - target) < 30) return; // 已在目标附近则不动
       sc.scrollTop = target;
     };
-    // 桌面端：Obsidian 内建通常会恢复，只补 2 次（内建没恢复时才生效）；手机端：多次等渲染
-    const timers = Platform.isMobile ? [150, 500, 1000, 2000, 4000] : [300, 1200];
+    // 只校正 2 次：第一次等容器就绪，第二次等大图渲染完成；避免多次跳来跳去
+    const timers = Platform.isMobile ? [100, 700] : [200];
     for (const t of timers) window.setTimeout(apply, t);
     window.setTimeout(() => {
       if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
-    }, Platform.isMobile ? 4500 : 1500);
+    }, Platform.isMobile ? 900 : 400);
   }
 
   /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */
@@ -1258,22 +1209,26 @@ export default class MermaidLinkNavPlugin extends Plugin {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const contentEl = view?.contentEl;
     if (!contentEl) return;
-    // 同一视图容器可能在不同笔记间复用，WeakSet 防重挂但 sourcePath 每次渲染更新
     this.activeScrollSource = sourcePath;
     if (this.scrollWatched.has(contentEl)) return;
     this.scrollWatched.add(contentEl);
     const sc = this.findScrollContainer(view!);
     if (!sc) return;
+    let saveTimer: number | undefined;
     const onScroll = (): void => {
-      if (this.restoringScrollFor === this.activeScrollSource) return; // 恢复过程不保存
-      setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
+      if (this.restoringScrollFor === this.activeScrollSource) return;
+      if (saveTimer) window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(() => {
+        setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
+      }, 400);
     };
     sc.addEventListener('scroll', onScroll, { passive: true });
+    // 切后台/退出时立即保存（localStorage 同步写入，不丢最后位置）
     const onHide = (): void => {
       if (document.hidden) {
+        if (saveTimer) window.clearTimeout(saveTimer);
         if (this.restoringScrollFor !== this.activeScrollSource)
           setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
-        flushScrollSave();
       }
     };
     document.addEventListener('visibilitychange', onHide);
