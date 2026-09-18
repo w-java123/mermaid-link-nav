@@ -115,10 +115,39 @@ function clearCurrentNodeHighlight(nodeG: SVGGElement): void {
   nodeG.classList.remove('mln-current-node');
 }
 
+/**
+ * 当前节点状态存于 vault 根目录文件（.mln-current-node.json），
+ * 这样 nut 坚果云等文件同步会把电脑端的选择同步到手机端。
+ * localStorage 仅作文件尚未加载完成时的回退。
+ */
 const CURRENT_NODE_KEY = 'mermaid-link-nav:current-node';
+const CURRENT_NODE_FILE = '.mln-current-node.json';
+let stateData: Record<string, string> | null = null;
+let stateApp: App | null = null;
+
+/** 从 vault 文件加载当前节点状态；文件不存在时尝试迁移一次 localStorage 旧数据 */
+async function loadStateFile(app: App): Promise<void> {
+  try {
+    const raw = await app.vault.adapter.read(CURRENT_NODE_FILE);
+    stateData = JSON.parse(raw) as Record<string, string>;
+    return;
+  } catch {
+    // 文件不存在或解析失败：尝试从 localStorage 迁移旧数据
+  }
+  try {
+    const raw = localStorage.getItem(CURRENT_NODE_KEY);
+    if (raw) {
+      stateData = JSON.parse(raw) as Record<string, string>;
+      await app.vault.adapter.write(CURRENT_NODE_FILE, JSON.stringify(stateData));
+      return;
+    }
+  } catch { /* ignore */ }
+  stateData = {};
+}
 
 /** 读取某笔记的当前选中节点 ID */
 function getCurrentNode(sourcePath: string): string | null {
+  if (stateData) return stateData[sourcePath] ?? null;
   try {
     const raw = localStorage.getItem(CURRENT_NODE_KEY);
     if (raw) return (JSON.parse(raw) as Record<string, string>)[sourcePath] ?? null;
@@ -126,15 +155,17 @@ function getCurrentNode(sourcePath: string): string | null {
   return null;
 }
 
-/** 设置某笔记的当前选中节点 ID（传 null 清除） */
+/** 设置某笔记的当前选中节点 ID（传 null 清除）；同步写 vault 文件以便跨设备同步 */
 function setCurrentNode(sourcePath: string, nodeId: string | null): void {
+  if (!stateData) stateData = {};
+  if (nodeId) stateData[sourcePath] = nodeId;
+  else delete stateData[sourcePath];
   try {
-    const raw = localStorage.getItem(CURRENT_NODE_KEY);
-    const data = raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    if (nodeId) data[sourcePath] = nodeId;
-    else delete data[sourcePath];
-    localStorage.setItem(CURRENT_NODE_KEY, JSON.stringify(data));
+    localStorage.setItem(CURRENT_NODE_KEY, JSON.stringify(stateData));
   } catch { /* ignore */ }
+  if (stateApp) {
+    void stateApp.vault.adapter.write(CURRENT_NODE_FILE, JSON.stringify(stateData)).catch(() => {});
+  }
 }
 
 export default class MermaidLinkNavPlugin extends Plugin {
@@ -142,6 +173,19 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    stateApp = this.app;
+    await loadStateFile(this.app);
+    this.app.workspace.onLayoutReady(() => this.applyStateToAll());
+    // nut 坚果云等文件同步把当前节点状态同步过来后，重新应用高亮
+    const onStateFileChange = (): void => {
+      void loadStateFile(this.app).then(() => this.applyStateToAll());
+    };
+    this.registerEvent(this.app.vault.on('modify', (file) => {
+      if (file.path === CURRENT_NODE_FILE) onStateFileChange();
+    }));
+    this.registerEvent(this.app.vault.on('create', (file) => {
+      if (file.path === CURRENT_NODE_FILE) onStateFileChange();
+    }));
     this.registerProcessors();
     this.addSettingTab(new MermaidLinkNavSettingTab(this.app, this));
 
@@ -304,6 +348,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
     el.empty();
     const wrapper = el.createDiv({ cls: 'mermaid-link-wrapper' });
     wrapper.dataset.mlnState = 'loading';
+    wrapper.dataset.sourcePath = ctx.sourcePath;
 
     const parsed = parseDiagram(source);
     const renderId = `mln-${++renderSeq}`;
@@ -324,6 +369,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
       wrapper.appendChild(svgDoc.documentElement);
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
+      wrapper.dataset.renderId = renderId;
       this.enhanceDiagram(wrapper, parsed.links, parsed.edges, ctx.sourcePath, renderId, source);
     } catch (err) {
       wrapper.empty();
@@ -985,6 +1031,21 @@ export default class MermaidLinkNavPlugin extends Plugin {
       const curG = nodeEls.find((g) => idOf.get(g) === currentNodeId);
       if (curG) applyCurrentNodeHighlight(curG);
     }
+  }
+
+  /** 按 vault 状态文件重新应用所有已渲染图的高亮（跨设备同步后调用） */
+  private applyStateToAll(): void {
+    document.querySelectorAll<HTMLElement>('.mermaid-link-wrapper').forEach((w) => {
+      const sp = w.dataset.sourcePath;
+      const renderId = w.dataset.renderId ?? '';
+      if (!sp) return;
+      const cur = getCurrentNode(sp);
+      w.querySelectorAll<SVGGElement>('g.node').forEach((g) => {
+        const nid = extractNodeId(g, renderId);
+        if (cur && nid === cur) applyCurrentNodeHighlight(g);
+        else clearCurrentNodeHighlight(g);
+      });
+    });
   }
 
   /** data-id 缺失时，用节点文本兜底匹配 */
