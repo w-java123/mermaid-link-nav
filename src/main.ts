@@ -1158,6 +1158,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
   /** 已挂滚动监听的视图容器（避免重复挂载） */
   private readonly scrollWatched = new WeakSet<HTMLElement>();
+
+  /** 同一会话中已恢复过滚动位置的笔记（编辑导致的重新渲染不再触发恢复） */
+  private readonly restoredNotes = new Set<string>();
   /** 正在恢复滚动位置的笔记（恢复期间该笔记的滚动不保存，避免把恢复中间值写回） */
   private restoringScrollFor: string | null = null;
   /** 最近一次渲染的笔记路径（滚动保存时用它，避免多笔记串位置） */
@@ -1186,6 +1189,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
    * 仅手机端（Obsidian 重启回到顶部）主动恢复。
    */
   private restoreScrollPosition(sourcePath: string): void {
+    if (this.restoredNotes.has(sourcePath)) return; // 同一会话已恢复过，编辑重渲染不再重置
+    this.restoredNotes.add(sourcePath);
     const target = getScrollPosition(sourcePath);
     if (target == null || target < 30) return; // 上次在顶部，不恢复
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
