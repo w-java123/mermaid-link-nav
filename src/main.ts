@@ -1132,8 +1132,8 @@ export default class MermaidLinkNavPlugin extends Plugin {
       if (curG) applyCurrentNodeHighlight(curG);
     }
     // 渲染完成后恢复笔记滚动位置（手机端 Obsidian 重启回到顶部问题）
-    this.restoreScrollPosition(sourcePath);
-    this.attachScrollSave(sourcePath);
+    this.restoreScrollPosition(sourcePath, wrapper);
+    this.attachScrollSave(sourcePath, wrapper);
   }
 
   /** 定时轮询状态文件：手机端 Obsidian 不触发外部文件变化事件，需兜底检测 */
@@ -1187,37 +1187,39 @@ export default class MermaidLinkNavPlugin extends Plugin {
    * 渲染完成后恢复笔记滚动位置（重启后回到上次退出位置）。
    * 设完后验证是否生效，被 Obsidian 内建恢复覆盖则重设。
    */
-  private restoreScrollPosition(sourcePath: string): void {
-    if (this.restoredNotes.has(sourcePath)) return; // 同一会话已恢复过，编辑重渲染不再重置
+  private restoreScrollPosition(sourcePath: string, wrapper?: HTMLElement): void {
+    if (this.restoredNotes.has(sourcePath)) return;
     this.restoredNotes.add(sourcePath);
     const target = getScrollPosition(sourcePath);
-    if (target == null || target < 30) return; // 上次在顶部，不恢复
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view) {
-      this.restoredNotes.delete(sourcePath); // 允许重试
-      window.setTimeout(() => this.restoreScrollPosition(sourcePath), 200);
+    console.log('[mln-scroll] restore called', sourcePath, 'target=', target, 'wrapper=', wrapper ? 'yes' : 'no');
+    if (target == null || target < 30) return;
+    // 从 wrapper 向上找滚动容器（不依赖 getActiveViewOfType，避免分屏/双标签页拿错视图）
+    let container = wrapper ? (wrapper.closest('.workspace-leaf-content') as HTMLElement | null) : null;
+    if (!container) {
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      container = view ? this.getScrollEl(view) : null;
+    }
+    if (!container) {
+      this.restoredNotes.delete(sourcePath);
+      window.setTimeout(() => this.restoreScrollPosition(sourcePath, wrapper), 200);
       return;
     }
     this.restoringScrollFor = sourcePath;
     let attempts = 0;
     const apply = (): void => {
-      const sc = this.getScrollEl(view);
-      if (!sc) { console.log('[mln-scroll] restore: no scroll container'); return; }
-      if (Math.abs(sc.scrollTop - target) < 30) {
-        console.log('[mln-scroll] restored OK', sourcePath, 'at', sc.scrollTop);
+      if (Math.abs(container.scrollTop - target) < 30) {
+        console.log('[mln-scroll] restored OK', sourcePath, 'at', container.scrollTop);
         return;
       }
-      sc.scrollTop = target;
+      container.scrollTop = target;
       attempts++;
-      console.log('[mln-scroll] restore attempt', attempts, sourcePath, 'target=', target, 'actual=', sc.scrollTop, 'scrollHeight=', sc.scrollHeight);
-      // 100ms 后验证：如果被 Obsidian 内建恢复覆盖了，重设一次（最多 3 次）
+      console.log('[mln-scroll] restore attempt', attempts, sourcePath, 'target=', target, 'actual=', container.scrollTop, 'scrollHeight=', container.scrollHeight);
       if (attempts < 3) {
         window.setTimeout(() => {
-          if (Math.abs(sc.scrollTop - target) >= 30) apply();
+          if (Math.abs(container.scrollTop - target) >= 30) apply();
         }, 100);
       }
     };
-    // 等 Obsidian 内建恢复完成后再设（桌面端内建恢复可能覆盖）
     const timers = Platform.isMobile ? [200, 900] : [400, 1200];
     for (const t of timers) window.setTimeout(apply, t);
     window.setTimeout(() => {
@@ -1251,24 +1253,22 @@ export default class MermaidLinkNavPlugin extends Plugin {
     }
   }
 
-  private attachScrollSave(sourcePath: string): void {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    const contentEl = view?.contentEl;
-    if (!contentEl) return;
-    this.activeScrollSource = sourcePath;
-    const sc = this.getScrollEl(view);
+  private attachScrollSave(sourcePath: string, wrapper?: HTMLElement): void {
+    // 从 wrapper 向上找滚动容器（不依赖 getActiveViewOfType，避免分屏/双标签页拿错视图）
+    let sc = wrapper ? (wrapper.closest('.workspace-leaf-content') as HTMLElement | null) : null;
+    if (!sc) {
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      sc = view ? this.getScrollEl(view) : null;
+    }
     if (!sc) return;
+    this.activeScrollSource = sourcePath;
     this.activeScrollEl = sc;
-    if (this.scrollWatched.has(contentEl)) return;
-    this.scrollWatched.add(contentEl);
+    if (this.scrollWatched.has(sc)) return;
+    this.scrollWatched.add(sc);
+    console.log('[mln-scroll] attach save on', sc.tagName, sc.className, 'for', sourcePath);
     let saveTimer: number | undefined;
-    let loggedContainer = false;
     const onScroll = (): void => {
       if (this.restoringScrollFor === this.activeScrollSource) return;
-      if (!loggedContainer) {
-        console.log('[mln-scroll] save container:', sc.tagName, sc.className, 'scrollTop=', sc.scrollTop, 'scrollHeight=', sc.scrollHeight);
-        loggedContainer = true;
-      }
       if (saveTimer) window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
         setScrollPosition(this.activeScrollSource, sc.scrollTop);
