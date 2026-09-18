@@ -222,22 +222,25 @@ function persistState(app: App): void {
  * 手机端 Obsidian 重启后不恢复笔记滚动位置（回到顶部），此机制解决该问题。
  */
 // 滚动位置用 localStorage（设备本地缓存，电脑/手机各自独立，不通过 nut 同步）
+// 存绝对像素（v1.15.49 起验证可用的方式），兼容旧版 {top,height} 对象格式
 const SCROLL_KEY_PREFIX = 'mln-scroll:';
 
-interface ScrollPos { top: number; height: number; }
-
-function getScrollPosition(sourcePath: string): ScrollPos | null {
+function getScrollPosition(sourcePath: string): number | null {
   try {
     const raw = localStorage.getItem(SCROLL_KEY_PREFIX + sourcePath);
-    return raw ? (JSON.parse(raw) as ScrollPos) : null;
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!isNaN(n)) return n;
+    const obj = JSON.parse(raw);
+    return typeof obj === 'object' && obj ? (obj.top as number) : null;
   } catch {
     return null;
   }
 }
 
-function setScrollPosition(sourcePath: string, top: number, height: number): void {
+function setScrollPosition(sourcePath: string, top: number): void {
   try {
-    localStorage.setItem(SCROLL_KEY_PREFIX + sourcePath, JSON.stringify({ top, height }));
+    localStorage.setItem(SCROLL_KEY_PREFIX + sourcePath, String(top));
   } catch {
     /* localStorage 不可用时忽略 */
   }
@@ -1162,21 +1165,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
   /** 缓存当前笔记的滚动容器引用（退出/切换时直接读 scrollTop，不需重新查找） */
   private activeScrollEl: HTMLElement | null = null;
 
-  /** 找视图的真实滚动容器（手机端 contentEl 本身可能不可滚动） */
-  private findScrollContainer(view: MarkdownView): HTMLElement | null {
-    const el = view.contentEl;
-    if (!el || !el.isConnected) return null;
-    // Obsidian 真正的滚动容器是 .workspace-leaf-content（contentEl 的祖先），
-    // 旧代码只看 contentEl 自身导致拿到视口元素、scrollTop 恒为 0
-    const leafContent = el.closest('.workspace-leaf-content') as HTMLElement | null;
-    if (leafContent && leafContent.scrollHeight > leafContent.clientHeight + 20) {
-      return leafContent;
-    }
-    // 源码模式 CodeMirror 滚动容器
-    const cm = el.querySelector<HTMLElement>('.cm-scroller');
-    if (cm && cm.scrollHeight > cm.clientHeight + 20) return cm;
-    if (el.scrollHeight > el.clientHeight + 20) return el;
-    return leafContent ?? el;
+  /** 获取滚动容器：用 Obsidian 官方 scrollContainerEl 属性（v1.15.49 验证可用） */
+  private getScrollEl(view: MarkdownView | null): HTMLElement | null {
+    const el = view?.contentEl;
+    if (!el) return null;
+    return (el as unknown as { scrollContainerEl?: HTMLElement }).scrollContainerEl ?? el;
   }
 
   /**
@@ -1185,37 +1178,33 @@ export default class MermaidLinkNavPlugin extends Plugin {
    * 仅手机端（Obsidian 重启回到顶部）主动恢复。
    */
   private restoreScrollPosition(sourcePath: string): void {
-    const saved = getScrollPosition(sourcePath);
-    if (!saved || saved.top < 30) return;
-    const ratio = saved.height > 0 ? saved.top / saved.height : 0;
+    const target = getScrollPosition(sourcePath);
+    if (target == null || target < 30) return; // 上次在顶部，不恢复
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) {
-      // 渲染时视图尚未激活，延迟重试一次
       window.setTimeout(() => this.restoreScrollPosition(sourcePath), 200);
       return;
     }
     this.restoringScrollFor = sourcePath;
     const apply = (): void => {
-      const sc = this.findScrollContainer(view);
-      if (!sc || sc.scrollHeight <= 0) return;
-      let target = Math.round(ratio * sc.scrollHeight);
-      if (target < 0) target = 0;
-      if (Math.abs(sc.scrollTop - target) < 30) return;
+      const sc = this.getScrollEl(view);
+      if (!sc) return;
+      if (Math.abs(sc.scrollTop - target) < 30) return; // 已在目标附近
       sc.scrollTop = target;
-      console.log('[mln-scroll] restored', sourcePath, '->', target, '/', sc.scrollHeight);
     };
-    const timers = Platform.isMobile ? [100, 700] : [200];
+    // 手机端 2 次校正（避免跳来跳去），桌面端 2 次
+    const timers = Platform.isMobile ? [150, 700] : [200, 800];
     for (const t of timers) window.setTimeout(apply, t);
     window.setTimeout(() => {
       if (this.restoringScrollFor === sourcePath) this.restoringScrollFor = null;
-    }, Platform.isMobile ? 900 : 400);
+    }, Platform.isMobile ? 900 : 1000);
   }
 
   /** 监听当前笔记视图滚动并保存；应用切后台/退出时立即保存 */
   /** 用缓存的容器引用保存当前滚动位置（退出/切换时调用，不依赖视图查找） */
   private saveCurrentScroll(): void {
     if (this.activeScrollSource && this.activeScrollEl) {
-      setScrollPosition(this.activeScrollSource, this.activeScrollEl.scrollTop, this.activeScrollEl.scrollHeight);
+      setScrollPosition(this.activeScrollSource, this.activeScrollEl.scrollTop);
     }
   }
 
@@ -1224,17 +1213,17 @@ export default class MermaidLinkNavPlugin extends Plugin {
     const contentEl = view?.contentEl;
     if (!contentEl) return;
     this.activeScrollSource = sourcePath;
-    const sc = this.findScrollContainer(view);
+    const sc = this.getScrollEl(view);
     if (!sc) return;
-    this.activeScrollEl = sc; // 每次渲染都更新容器引用
-    if (this.scrollWatched.has(contentEl)) return; // 只防重复挂监听
+    this.activeScrollEl = sc;
+    if (this.scrollWatched.has(contentEl)) return;
     this.scrollWatched.add(contentEl);
     let saveTimer: number | undefined;
     const onScroll = (): void => {
       if (this.restoringScrollFor === this.activeScrollSource) return;
       if (saveTimer) window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(() => {
-        setScrollPosition(this.activeScrollSource, sc.scrollTop, sc.scrollHeight);
+        setScrollPosition(this.activeScrollSource, sc.scrollTop);
       }, 400);
     };
     sc.addEventListener('scroll', onScroll, { passive: true });
