@@ -1,8 +1,8 @@
 # Mermaid Link Navigator (Obsidian Plugin)
 
-**Mermaid Link Navigator** is an [Obsidian](https://obsidian.md) plugin that renders Mermaid flowcharts with **clickable [[wikilink]] nodes**. Ctrl/⌘+click a node to jump to its linked note. It also provides right-click visual editing of the flowchart (add / edit / delete nodes, change shapes, decision nodes with yes/no branches, parent-child links), canvas-style zoom and pan, a current-node locator, and automatic link synchronization when notes are renamed.
+**Mermaid Link Navigator** is an [Obsidian](https://obsidian.md) plugin that renders Mermaid flowcharts with **clickable [[wikilink]] nodes**. Ctrl/⌘+click a node to jump to its linked note. It also provides right-click visual editing of the flowchart (add / edit / delete nodes, change shapes, decision nodes with yes/no branches, parent-child links), canvas-style zoom and pan, a current-node locator, SVG/PNG export, and automatic link synchronization when notes are renamed.
 
-**Features**: node-embedded [[note links]] · Ctrl/⌘+click navigation (plain click does not jump) · right-click visual editing that writes back to the note source · decision nodes (diamond) with yes-left / no-right layout · node shapes: rectangle / rounded / circle / diamond / hexagon / cylinder / double-border · canvas zoom & pan with auto-saved view state · dashed border when the target note does not exist (auto-create with configurable folder) · auto-sync links on note rename · outline-to-flowchart view · built-in Mermaid 11 (works offline) · desktop & mobile support.
+**Features**: node-embedded [[note links]] · Ctrl/⌘+click navigation (plain click does not jump) · right-click visual editing that writes back to the note source · decision nodes (diamond) with yes-left / no-right layout · node shapes: rectangle / rounded / circle / diamond / hexagon / cylinder / double-border · canvas zoom & pan with auto-saved view state · select & locate current executing node · export full diagram as SVG / high-res PNG · dashed border when the target note does not exist (auto-create with configurable folder) · auto-sync links on note rename · outline-to-flowchart view · built-in Mermaid 11 (works offline) · desktop & mobile support.
 
 **Install**: search **Mermaid Link Navigator** in Obsidian → Settings → Third-party plugins → Browse. Manual install: put `main.js`, `manifest.json`, `styles.css` from the latest release into `.obsidian/plugins/mermaid-link-nav/`.
 
@@ -10,7 +10,7 @@
 
 # Mermaid Link Navigator（Obsidian 插件）
 
-在 Mermaid 流程图的**节点里直接写 `[[笔记链接]]`**，阅读模式下 Ctrl/⌘+单击节点即可跳转到对应笔记。支持右键可视化编辑流程图、画布式缩放平移、当前节点一键定位。
+在 Mermaid 流程图的**节点里直接写 `[[笔记链接]]`**，阅读模式下 Ctrl/⌘+单击节点即可跳转到对应笔记。支持右键可视化编辑流程图、画布式缩放平移、当前正在执行节点的选择与一键定位、导出 SVG / 高清 PNG。
 
 ## 功能
 
@@ -19,25 +19,28 @@
 - **右键可视化编辑**（自动写回笔记源码）：
   - 添加节点（可指定上下游节点，笔记链接默认为节点名称）
   - 编辑节点名称和跳转链接
-  - 删除节点（入边自动指向出边）
+  - 删除节点（红色标注，入边自动指向出边）
   - 改变形状：矩形 / 圆角矩形 / 圆形 / 菱形 / 六边形 / 圆柱形 / 双边框
   - 添加父节点 / 添加子节点（点击图上任意已存在节点）
   - 设置为判断节点（菱形，是/否分支，是左否右布局）
   - 更换判断节点的【是】/【否】子节点
   - 移除父节点 / 移除子节点（删除对应连线）
   - 更换位置（与另一节点交换显示内容）
-  - 设为 / 取消当前节点
-- **当前节点一键定位**：设为当前节点后，图上方出现「定位当前节点」按钮，点击自动平移缩放到该节点
+- **选择当前正在执行的节点**：点击图上方红色「选择当前正在执行的节点」按钮，屏幕中间提示后点击图上任一节点即选中；选中后出现绿色「🎯 定位当前正在执行的节点」按钮和灰色「取消选中当前正在执行的节点」按钮
+- **一键定位当前节点**：点击绿色「🎯 定位当前正在执行的节点」按钮，自动平移缩放并滚动页面到该节点位置
 - **画布式缩放与平移**：
   - 鼠标滚轮 / Ctrl+滚轮 / 触摸板双指捏合：以指针位置为中心缩放（上滚放大、下滚缩小）
   - 触摸板双指滑动 / 鼠标左键拖动 / 触屏单指拖动：平移
-  - 缩放平移状态自动保存，跳转笔记返回或重启后恢复
+  - 缩放平移状态与滚动位置自动保存，重启后直接恢复到上次位置（不闪）
+- **导出整张完整图**：
+  - 💾 导出 SVG：矢量格式，无限放大不失真
+  - 🖼️ 导出 PNG：高清位图，纯白背景，默认存入「笔记名的PNG图片」文件夹
 - **目标笔记不存在时**，节点边框显示为虚线，点击按 Obsidian 规则新建笔记（可指定默认文件夹）
 - **笔记重命名自动同步**：重命名笔记后，mermaid 中对应的跳转链接自动更新
 - **笔记大纲一键变流程图**：命令面板执行「Mermaid Link Navigator：打开当前笔记的流程图视图」，自动读取标题与列表层级生成 flowchart
 - 正常渲染 Mermaid 流程图 / 时序图等全部 Mermaid 图形（内置 Mermaid 11，不依赖网络）
 - 主题自动跟随 Obsidian 明暗模式，可在设置中固定
-- 兼容桌面端与移动端
+- 兼容桌面端与移动端（手机端支持双指缩放、单指拖动平移）
 
 ## 安装
 
@@ -87,9 +90,19 @@ flowchart LR
 
 右键节点 →「设置为判断节点」，依次点击选择【是】和【否】的子节点。判断节点显示为菱形，【是】分支自动排在左侧、【否】分支在右侧。后续可右键 →「更换【是】节点」/「更换【否】节点」单独修改。
 
-### 当前节点定位
+### 选择并定位当前正在执行的节点
 
-右键节点 →「设为当前节点」，流程图上方出现绿色「🎯 定位当前节点」按钮，点击后自动平移缩放到该节点位置（不隐藏其他节点）。
+点击图上方红色「选择当前正在执行的节点」按钮，屏幕中间出现提示后点击图上任意节点即选中（按 Esc 取消）。选中后：
+
+- 节点高亮显示
+- 图上方出现绿色「🎯 定位当前正在执行的节点」按钮，点击后自动平移缩放并滚动页面到该节点
+- 图上方出现灰色「取消选中当前正在执行的节点」按钮，点击取消选中
+
+节点位置跨设备同步，手机端选好节点后电脑端重启也能定位到同一节点。
+
+### 导出图片
+
+点击图上方「💾导出SVG」或「🖼️导出PNG」按钮，导出整张完整流程图（非当前缩放视口）。默认存入以笔记名命名的文件夹（如「找工作流程的PNG图片」），可在设置中改为固定文件夹。
 
 ## 设置项
 
@@ -100,7 +113,8 @@ flowchart LR
 | 图表主题 | 自动 / 浅色 / 深色 / forest / neutral |
 | 默认打开方式 | 当前标签页 / 新标签页 / 左右分屏（修饰键优先级更高） |
 | 新笔记默认文件夹 | 节点链接不存在时，自动创建笔记的目标文件夹（不存在则自动创建） |
-| 单击/双击判定延时 | 默认 220ms，防止双击时误触发跳转 |
+| PNG 导出文件夹 | 留空时自动用「笔记名的PNG图片」文件夹；可选择固定文件夹 |
+| SVG 导出文件夹 | 留空时自动用「笔记名的SVG图片」文件夹；可选择固定文件夹 |
 | 悬停提示 | 鼠标悬停节点时显示目标笔记 |
 | 悬停高亮 | 高亮可点击节点 |
 
