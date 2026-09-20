@@ -3614,7 +3614,10 @@ ${e} --> ${r}`;return t.replace(/\s+$/,"")+n+`
 ${e} -->|${n}| ${r}`;return t.replace(/\s+$/,"")+i+`
 `}function cFe(t,e,r,n){t=ns(t);let i=bZ(t,e,"diamond");i=CZ(i,e);let a=Mo(i),s=a.nodes.find(l=>l.id===r);s||(i=i.replace(/\s+$/,"")+`
 ${r}["${r}"]
-`,a=Mo(i),s=a.nodes.find(l=>l.id===r));let o=a.nodes.find(l=>l.id===n);if(s&&(!o||s.start>o.start)){let l=i.slice(0,s.start);if(!/-->\s*$/.test(l)){let u=i.slice(s.start,s.end);i=i.slice(0,s.start)+i.slice(s.end);let d=Mo(i).nodes.find(p=>p.id===n),f=-1;if(d&&!/-->\s*$/.test(i.slice(0,d.start)))f=d.start;else{let p=i.match(/^\s*(%%\{.*?\}%%\s*)?(flowchart|graph)\s+\w+\s*/);p&&(f=p[0].length)}f>=0&&(i=i.slice(0,f)+u+"; "+i.slice(f))}}return i=vZ(i,e,r,"\u662F"),i=vZ(i,e,n,"\u5426"),r!==n&&(i=i.replace(/\s+$/,"")+`
+`,a=Mo(i),s=a.nodes.find(l=>l.id===r));let o=a.nodes.find(l=>l.id===n);if(s&&o&&s.start>o.start){let l=i.slice(s.start,s.end),u=i.slice(o.start,o.end),h=Math.min(s.start,o.start),d=Math.max(s.start,o.end),f=Math.min(s.end,o.end),p=Math.max(s.start,o.start),g=i.slice(s.start,s.end);i=i.slice(0,s.start)+i.slice(s.end);let y=Mo(i).nodes.find(v=>v.id===n);y&&(i=i.slice(0,y.start)+g+`
+`+i.slice(y.start))}else s&&!o&&(i=i.replace(/\s+$/,"")+`
+${n}["${n}"]
+`);return i=vZ(i,e,r,"\u662F"),i=vZ(i,e,n,"\u5426"),r!==n&&(i=i.replace(/\s+$/,"")+`
 ${r} ~~~ ${n}
 `),i}function kZ(t,e,r,n){if(e===n)return t;t=ns(t);let i=r==="yes"?"\u662F":"\u5426",a=r==="yes"?"\u5426":"\u662F",s=e.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),o=new RegExp(`${s}\\s*-->\\s*\\|${i}\\|\\s*([A-Za-z_][\\w-]*)`),l=t.match(o),u=l?l[1]:null,h=new RegExp(`${s}\\s*-->\\s*\\|${a}\\|\\s*([A-Za-z_][\\w-]*)`),d=t.match(h),f=d?d[1]:null,p=t;if(u&&(p=aFe(p,e,u)),p=vZ(p,e,n,i),f&&n!==f){let g=u?u.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"):"",m=f.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),y=!1;if(g){let v=new RegExp(`(?:^|\\n)\\s*${g}\\s*~~~\\s*${m}\\s*(?=\\n|$)`,"m"),b=new RegExp(`(?:^|\\n)\\s*${m}\\s*~~~\\s*${g}\\s*(?=\\n|$)`,"m");v.test(p)?(p=p.replace(v,`
 ${n} ~~~ ${f}
