@@ -252,7 +252,8 @@ export function removeIncomingEdges(source: string, nodeId: string): string {
       result.push(rawLine);
       continue;
     }
-    if (inEdgeRe.test(line)) {
+    // 保留判断节点的【是/否】分支连线（带 |是| 或 |否| 标签的边不断开）
+    if (inEdgeRe.test(line) && !/-->\s*\|(是|否)\|/.test(line)) {
       if (selfDefRe.test(line)) {
         // C --> D["标签"]：只删掉紧邻 D 前的 源 -->，保留 D 的定义和前面其他语句
         const modified = line.replace(
@@ -293,7 +294,8 @@ export function removeOutgoingEdges(source: string, nodeId: string): string {
       result.push(rawLine);
       continue;
     }
-    if (selfDefRe.test(line) && /-->/.test(line)) {
+    // 保留判断节点的【是/否】分支连线（带 |是| 或 |否| 标签的边不断开）
+    if (selfDefRe.test(line) && /-->/.test(line) && !/-->\s*\|(是|否)\|/.test(line)) {
       // F["名称"] --> G：只删 nodeId 的出边，不删入边
       // 出边+目标定义同行：nodeId --> G["定义"] → 保留 G["定义"]
       let modified = line.replace(
@@ -305,11 +307,11 @@ export function removeOutgoingEdges(source: string, nodeId: string): string {
       modified = modified.replace(/\s*-->\s*$/, '').trimEnd();
       if (modified.trim()) result.push(prefix + modified);
       else if (prefix) result.push(prefix.trimEnd());
-    } else if (pureOutRe.test(line) && TARGET_DEF_RE.test(line)) {
+    } else if (pureOutRe.test(line) && TARGET_DEF_RE.test(line) && !/-->\s*\|(是|否)\|/.test(line)) {
       // F --> G["名称"]：删掉 F -->，保留 G 的节点定义
       const modified = line.replace(new RegExp(`^\\s*${nodeId}\\s*-->\\s*`), '');
       if (modified.trim()) result.push(prefix + modified);
-    } else if (pureOutRe.test(line)) {
+    } else if (pureOutRe.test(line) && !/-->\s*\|(是|否)\|/.test(line)) {
       // 纯出边行 F --> G，删除（保留 prefix）
       if (prefix) result.push(prefix.trimEnd());
     } else if (chainRe.test(line)) {
