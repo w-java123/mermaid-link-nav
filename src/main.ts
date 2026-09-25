@@ -12,7 +12,7 @@ import {
   TFile,
   TFolder,
   AbstractInputSuggest,
-  SuggestModal,
+  Modal,
 } from 'obsidian';
 import mermaid from 'mermaid';
 import { PanZoomController, loadViewBoxFile, VIEWBOX_FILE } from './pan-zoom';
@@ -89,25 +89,45 @@ class FolderSuggest extends AbstractInputSuggest<string> {
   }
 }
 
-/** 文件夹选择弹窗：从仓库所有文件夹中选择一个（右键文件夹设置新笔记创建位置用） */
-class FolderPickModal extends SuggestModal<TFolder> {
-  private folders: TFolder[];
-  private onPick: (folder: TFolder) => void;
-  constructor(app: App, folders: TFolder[], onPick: (folder: TFolder) => void) {
+/** 输入目标文件夹路径的弹窗：支持输入还不存在的文件夹名/路径（创建笔记时自动创建），输入时联想已存在文件夹 */
+class FolderInputModal extends Modal {
+  private initial: string;
+  private resolve: (v: string) => void;
+  constructor(app: App, title: string, initial: string) {
     super(app);
-    this.folders = folders;
-    this.onPick = onPick;
-    this.setPlaceholder('选择该文件夹的新笔记创建位置…（根目录选 /）');
-    this.limit = 50;
+    this.initial = initial;
+    this.resolve = () => {};
+    this.titleEl.setText(title);
   }
-  getSuggestions(): TFolder[] {
-    return this.folders;
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.createEl('p', {
+      text: '输入目标文件夹路径。可以输入还不存在的文件夹（如「找工作流程/新文件夹」，创建笔记时会自动创建）；输入过程中可联想选择已存在的文件夹。留空 = Obsidian 默认位置。',
+    });
+    const input = contentEl.createEl('input', { type: 'text', placeholder: '例如：Inbox 或 学习笔记/草稿' });
+    input.value = this.initial;
+    input.classList.add('mln-folder-input');
+    new FolderSuggest(this.app, input);
+    const onConfirm = (): void => {
+      const v = input.value.trim().replace(/^\/+|\/+$/g, '');
+      this.resolve(v);
+      this.close();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') onConfirm();
+    });
+    const btn = contentEl.createEl('button', { text: '确定', cls: 'mod-cta' });
+    btn.addEventListener('click', onConfirm);
+    window.setTimeout(() => input.focus(), 50);
   }
-  renderSuggestion(folder: TFolder, el: HTMLElement): void {
-    el.setText(folder.path === '/' ? '库根目录 /' : folder.path);
+  onClose(): void {
+    this.contentEl.empty();
   }
-  onChooseSuggestion(folder: TFolder, _evt: MouseEvent | KeyboardEvent): void {
-    this.onPick(folder);
+  openAndGet(): Promise<string> {
+    return new Promise((resolve) => {
+      this.resolve = resolve;
+      this.open();
+    });
   }
 }
 
@@ -343,18 +363,20 @@ export default class MermaidLinkNavPlugin extends Plugin {
             .setTitle('设置该文件夹的新笔记创建位置')
             .setIcon('folder-input')
             .onClick(() => {
-              const folders = this.app.vault
-                .getAllLoadedFiles()
-                .filter((f): f is TFolder => f instanceof TFolder)
-                .sort((a, b) => a.path.localeCompare(b.path));
-              new FolderPickModal(this.app, folders, (target) => {
-                const targetPath = target.path === '/' ? '' : target.path;
-                this.settings.folderNewNoteMap[file.path] = targetPath;
-                void this.saveSettings();
-                new Notice(
-                  `已设置：${file.path === '/' ? '库根目录' : file.path} 的新笔记创建位置 → ${targetPath === '' ? 'Obsidian 默认位置' : targetPath}`,
-                );
-              }).open();
+              const current = this.settings.folderNewNoteMap[file.path] || '';
+              void new FolderInputModal(
+                this.app,
+                `设置「${file.path === '/' ? '库根目录' : file.path}」的新笔记创建位置`,
+                current,
+              )
+                .openAndGet()
+                .then((targetPath) => {
+                  this.settings.folderNewNoteMap[file.path] = targetPath;
+                  void this.saveSettings();
+                  new Notice(
+                    `已设置：${file.path === '/' ? '库根目录' : file.path} 的新笔记创建位置 → ${targetPath === '' ? 'Obsidian 默认位置' : targetPath}`,
+                  );
+                });
             }),
         );
       }),

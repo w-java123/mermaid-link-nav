@@ -331,3 +331,9 @@
     filter: drop-shadow(0 0 10px rgba(255, 40, 60, 1)) drop-shadow(0 0 28px rgba(255, 40, 60, 0.95));
   }
 }
+
+/* 右键文件夹设置新笔记创建位置：输入框 */
+.mln-folder-input {
+  width: 100%;
+  margin-bottom: 8px;
+}
