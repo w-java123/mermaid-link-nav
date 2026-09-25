@@ -12,6 +12,7 @@ import {
   TFile,
   TFolder,
   AbstractInputSuggest,
+  SuggestModal,
 } from 'obsidian';
 import mermaid from 'mermaid';
 import { PanZoomController, loadViewBoxFile, VIEWBOX_FILE } from './pan-zoom';
@@ -85,6 +86,28 @@ class FolderSuggest extends AbstractInputSuggest<string> {
     this.setValue(item);
     this.target.dispatchEvent(new Event('input', { bubbles: true }));
     this.close();
+  }
+}
+
+/** 文件夹选择弹窗：从仓库所有文件夹中选择一个（右键文件夹设置新笔记创建位置用） */
+class FolderPickModal extends SuggestModal<TFolder> {
+  private folders: TFolder[];
+  private onPick: (folder: TFolder) => void;
+  constructor(app: App, folders: TFolder[], onPick: (folder: TFolder) => void) {
+    super(app);
+    this.folders = folders;
+    this.onPick = onPick;
+    this.setPlaceholder('选择该文件夹的新笔记创建位置…（根目录选 /）');
+    this.limit = 50;
+  }
+  getSuggestions(): TFolder[] {
+    return this.folders;
+  }
+  renderSuggestion(folder: TFolder, el: HTMLElement): void {
+    el.setText(folder.path === '/' ? '库根目录 /' : folder.path);
+  }
+  onChooseSuggestion(folder: TFolder, _evt: MouseEvent | KeyboardEvent): void {
+    this.onPick(folder);
   }
 }
 
@@ -311,6 +334,32 @@ export default class MermaidLinkNavPlugin extends Plugin {
     this.registerEvent(this.app.vault.on('create', (file) => {
       if (file.path === VIEWBOX_FILE) void loadViewBoxFile(this.app);
     }));
+    // 右键文件夹 → 设置该文件夹的新笔记创建位置
+    this.registerEvent(
+      this.app.workspace.on('file-menu', (menu, file) => {
+        if (!(file instanceof TFolder)) return;
+        menu.addItem((item) =>
+          item
+            .setTitle('设置该文件夹的新笔记创建位置')
+            .setIcon('folder-input')
+            .onClick(() => {
+              const folders = this.app.vault
+                .getAllLoadedFiles()
+                .filter((f): f is TFolder => f instanceof TFolder)
+                .sort((a, b) => a.path.localeCompare(b.path));
+              new FolderPickModal(this.app, folders, (target) => {
+                const targetPath = target.path === '/' ? '' : target.path;
+                this.settings.folderNewNoteMap[file.path] = targetPath;
+                void this.saveSettings();
+                new Notice(
+                  `已设置：${file.path === '/' ? '库根目录' : file.path} 的新笔记创建位置 → ${targetPath === '' ? 'Obsidian 默认位置' : targetPath}`,
+                );
+              }).open();
+            }),
+        );
+      }),
+    );
+
     this.registerProcessors();
     this.addSettingTab(new MermaidLinkNavSettingTab(this.app, this));
 
@@ -1129,10 +1178,21 @@ export default class MermaidLinkNavPlugin extends Plugin {
           // 链接不存在且设置了目标文件夹、且链接本身未指定路径时，自动在该文件夹创建
           const targetPath = link.target.split('#')[0];
           const existed = !!this.app.metadataCache.getFirstLinkpathDest(targetPath, sourcePath);
-          // 目标文件夹：优先按当前笔记的根目录文件夹映射，其次全局设置
-          const rootFolder = sourcePath.includes('/') ? sourcePath.split('/')[0] : '';
-          const folderSetting =
-            (rootFolder && this.settings.folderNewNoteMap[rootFolder]) || this.settings.newNoteFolder;
+          // 目标文件夹：按当前笔记所在文件夹路径逐级向上匹配映射，其次全局设置
+          let folderSetting = this.settings.newNoteFolder;
+          if (sourcePath.includes('/')) {
+            let dir = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
+            while (dir) {
+              const v = this.settings.folderNewNoteMap[dir];
+              if (v) {
+                folderSetting = v;
+                break;
+              }
+              const idx = dir.lastIndexOf('/');
+              if (idx < 0) break;
+              dir = dir.substring(0, idx);
+            }
+          }
           if (!existed && folderSetting && !targetPath.includes('/')) {
             let folder = this.app.vault.getAbstractFileByPath(folderSetting);
             if (!(folder instanceof TFolder)) {
@@ -1539,9 +1599,9 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
           .addText((text) =>
             text
               .setPlaceholder('留空 = 使用全局设置')
-              .setValue(this.plugin.settings.folderNewNoteMap[folder.name] || '')
+              .setValue(this.plugin.settings.folderNewNoteMap[folder.path] || '')
               .onChange(async (v) => {
-                this.plugin.settings.folderNewNoteMap[folder.name] = v.trim().replace(/^\/+|\/+$/g, '');
+                this.plugin.settings.folderNewNoteMap[folder.path] = v.trim().replace(/^\/+|\/+$/g, '');
                 await this.plugin.saveSettings();
               }),
           );
