@@ -41,9 +41,9 @@ interface MermaidLinkNavSettings {
   hoverHighlight: boolean;
   /** 点击不存在的链接时，自动创建笔记的目标文件夹（留空=Obsidian 默认位置） */
   newNoteFolder: string;
-  /** PNG 导出文件夹（留空=使用「笔记名+PNG图片」自动命名） */
+  /** PNG 导出文件夹（留空=库根目录「PNG图片」全局文件夹，自动按笔记名建子文件夹） */
   exportFolderPng: string;
-  /** SVG 导出文件夹（留空=使用「笔记名+SVG图片」自动命名） */
+  /** SVG 导出文件夹（留空=库根目录「SVG图片」全局文件夹，自动按笔记名建子文件夹） */
   exportFolderSvg: string;
 }
 
@@ -873,23 +873,33 @@ export default class MermaidLinkNavPlugin extends Plugin {
 
     // ---- 导出整张完整图（非当前缩放视口） ----
     const fileNameBase = (sourcePath.split('/').pop() || 'mermaid-diagram').replace(/\.(md|markdown)$/i, '');
-    // 导出目标文件夹：默认「笔记名+格式」命名（如：找工作流程的PNG图片），可在设置中更改
+    /** 逐级创建文件夹（Obsidian createFolder 对嵌套路径兼容性不一，逐级创建最稳） */
+    const ensureFolder = async (path: string): Promise<void> => {
+      const parts = path.split('/').filter(Boolean);
+      let cur = '';
+      for (const part of parts) {
+        cur = cur ? `${cur}/${part}` : part;
+        const existing = this.app.vault.getAbstractFileByPath(cur);
+        if (!existing) {
+          try {
+            await this.app.vault.createFolder(cur);
+          } catch {
+            /* 并发创建/已存在等情况，忽略 */
+          }
+        }
+      }
+    };
+    // 导出目标文件夹：留空 = 库根目录全局文件夹（PNG图片/SVG图片）+ 笔记名子文件夹；填写 = 用户自定义固定路径
     const getExportFolder = async (kind: 'svg' | 'png'): Promise<string> => {
       const key = kind === 'png' ? this.settings.exportFolderPng : this.settings.exportFolderSvg;
       let folder = (key || '').trim().replace(/^\/+|\/+$/g, '');
       if (!folder) {
+        const root = kind === 'png' ? 'PNG图片' : 'SVG图片';
         const active = this.app.workspace.getActiveFile();
-        const base = active ? active.basename : 'Mermaid导图';
-        folder = `${base}的${kind === 'png' ? 'PNG' : 'SVG'}图片`;
+        const noteName = active ? active.basename : 'Mermaid导图';
+        folder = `${root}/${noteName}`;
       }
-      const existing = this.app.vault.getAbstractFileByPath(folder);
-      if (!(existing instanceof TFolder)) {
-        try {
-          await this.app.vault.createFolder(folder);
-        } catch {
-          // 文件夹已存在等情况，忽略
-        }
-      }
+      await ensureFolder(folder);
       return folder;
     };
     /** 写入 vault，同名文件自动加序号避免覆盖 */
@@ -1467,11 +1477,11 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('PNG 导出文件夹')
-      .setDesc('导出 PNG 图片的存放位置。留空时自动使用「笔记名的PNG图片」文件夹（如“找工作流程的PNG图片”）；点击输入框可从仓库中选择固定文件夹，之后所有 PNG 都导出到那里。')
+      .setDesc('导出 PNG 图片的存放位置。留空时导出到库根目录「PNG图片」全局文件夹，并按笔记名自动创建子文件夹（如“PNG图片/找工作流程/”）；填写后使用固定文件夹，所有 PNG 都导出到那里。')
       .addText((text) => {
         new FolderSuggest(this.app, text.inputEl);
         text
-          .setPlaceholder('留空 = 笔记名的PNG图片')
+          .setPlaceholder('留空 = 根目录 PNG图片/笔记名')
           .setValue(this.plugin.settings.exportFolderPng)
           .onChange(async (v) => {
             this.plugin.settings.exportFolderPng = v.trim().replace(/^\/+|\/+$/g, '');
@@ -1481,11 +1491,11 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('SVG 导出文件夹')
-      .setDesc('导出 SVG 图片的存放位置。留空时自动使用「笔记名的SVG图片」文件夹（如“找工作流程的SVG图片”）；点击输入框可从仓库中选择固定文件夹，之后所有 SVG 都导出到那里。')
+      .setDesc('导出 SVG 图片的存放位置。留空时导出到库根目录「SVG图片」全局文件夹，并按笔记名自动创建子文件夹（如“SVG图片/找工作流程/”）；填写后使用固定文件夹，所有 SVG 都导出到那里。')
       .addText((text) => {
         new FolderSuggest(this.app, text.inputEl);
         text
-          .setPlaceholder('留空 = 笔记名的SVG图片')
+          .setPlaceholder('留空 = 根目录 SVG图片/笔记名')
           .setValue(this.plugin.settings.exportFolderSvg)
           .onChange(async (v) => {
             this.plugin.settings.exportFolderSvg = v.trim().replace(/^\/+|\/+$/g, '');
