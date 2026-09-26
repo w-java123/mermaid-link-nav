@@ -781,7 +781,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
             }),
           );
 
-          // 设置为判断节点（点击图上节点选择是/否目标）
+                    // 设置为判断节点（点击图上节点选择是/否目标，Esc 可跳过当前分支只设一个）
           menu.addItem((item) =>
             item.setTitle('设置为判断节点').onClick(() => {
               if (!svg) return;
@@ -797,7 +797,7 @@ export default class MermaidLinkNavPlugin extends Plugin {
                 hint.style.left = `${rect.left + rect.width / 2}px`;
                 hint.style.top = `${rect.top - 8}px`;
               };
-              setHint('请点击选择为【是】时的子节点（Esc 取消）', '【是】');
+              setHint('请点击选择为【是】时的子节点（Esc 跳过【是】，继续选择【否】）', '【是】');
               document.body.appendChild(hint);
 
               const cleanup = () => {
@@ -806,8 +806,27 @@ export default class MermaidLinkNavPlugin extends Plugin {
                 hint.remove();
               };
 
+              const finish = (noTarget: string | null) => {
+                cleanup();
+                // 两个分支都没选视为取消
+                if (!yesTarget && !noTarget) return;
+                const newSource = setAsDecision(diagramSource, nodeId, yesTarget, noTarget);
+                updateNoteSource(this.app, sourcePath, diagramSource, newSource).then((ok) => {
+                  if (!ok) new Notice('设置判断节点失败');
+                });
+              };
+
               const onKey = (ev: KeyboardEvent) => {
-                if (ev.key === 'Escape') cleanup();
+                if (ev.key !== 'Escape') return;
+                ev.stopPropagation();
+                if (phase === 'yes') {
+                  // 跳过【是】分支，继续选【否】
+                  phase = 'no';
+                  setHint('请点击选择为【否】时的子节点（Esc 跳过【否】，完成设置）', '【否】');
+                } else {
+                  // 跳过【否】分支，完成设置
+                  finish(null);
+                }
               };
 
               const onClick = (ev: MouseEvent) => {
@@ -820,14 +839,9 @@ export default class MermaidLinkNavPlugin extends Plugin {
                 if (phase === 'yes') {
                   yesTarget = targetId;
                   phase = 'no';
-                  setHint('请点击选择为【否】时的子节点（Esc 取消）', '【否】');
+                  setHint('请点击选择为【否】时的子节点（Esc 跳过【否】，完成设置）', '【否】');
                 } else {
-                  const noTarget = targetId;
-                  cleanup();
-                  const newSource = setAsDecision(diagramSource, nodeId, yesTarget!, noTarget);
-                  updateNoteSource(this.app, sourcePath, diagramSource, newSource).then((ok) => {
-                    if (!ok) new Notice('设置判断节点失败');
-                  });
+                  finish(targetId);
                 }
               };
 

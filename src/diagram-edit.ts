@@ -332,58 +332,56 @@ export function addLabeledEdge(source: string, from: string, to: string, label: 
   return source.replace(/\s+$/, '') + edge + '\n';
 }
 
-/** 设置为判断节点：改菱形 + 删除原有出边 + 确保【是】定义在【否】前面 + 添加是/否边 + 隐形链接 */
+/** 设置为判断节点：改菱形 + 删除原有出边 + 确保【是】定义在【否】前面 + 添加是/否边 + 隐形链接
+ * yesTarget / noTarget 可为 null：只设一个分支时跳过另一个（不补定义、不加边、不建隐形链接） */
 export function setAsDecision(
   source: string,
   nodeId: string,
-  yesTarget: string,
-  noTarget: string,
+  yesTarget: string | null,
+  noTarget: string | null,
 ): string {
   source = normalizeDiagram(source);
   let result = changeNodeShape(source, nodeId, 'diamond');
   result = removeOutgoingEdges(result, nodeId);
 
-  // 确保是目标有节点定义（没有则补一个，标签用 ID）
-  let parsed = parseDiagram(result);
-  let yesNode = parsed.nodes.find((n) => n.id === yesTarget);
-  if (!yesNode) {
-    result = result.replace(/\s+$/, '') + `\n${yesTarget}["${yesTarget}"]\n`;
-    parsed = parseDiagram(result);
-    yesNode = parsed.nodes.find((n) => n.id === yesTarget);
+  // 确保是/否目标有节点定义（没有则补一个，标签用 ID；null 分支跳过）
+  if (yesTarget) {
+    const parsed = parseDiagram(result);
+    if (!parsed.nodes.some((n) => n.id === yesTarget)) {
+      result = result.replace(/\s+$/, '') + `\n${yesTarget}["${yesTarget}"]\n`;
+    }
   }
-  const noNode = parsed.nodes.find((n) => n.id === noTarget);
+  if (noTarget) {
+    const parsed = parseDiagram(result);
+    if (!parsed.nodes.some((n) => n.id === noTarget)) {
+      result = result.replace(/\s+$/, '') + `\n${noTarget}["${noTarget}"]\n`;
+    }
+  }
 
   // 确保【是】节点定义在【否】节点定义前面（mermaid 按源码顺序排左右：先出现的在左）
-  if (yesNode && noNode && yesNode.start > noNode.start) {
-    // 是目标定义在否目标后面，交换两者的定义文本
-    const yesDef = result.slice(yesNode.start, yesNode.end);
-    const noDef = result.slice(noNode.start, noNode.end);
-    // 先删后面的再删前面的（避免位置偏移）
-    let a = Math.min(yesNode.start, noNode.start);
-    let b = Math.max(yesNode.start, noNode.end);
-    let c = Math.min(yesNode.end, noNode.end);
-    let d = Math.max(yesNode.start, noNode.start);
-    // 简化：直接在否目标定义前插入是目标定义，删掉原是目标定义
-    const yesDefText = result.slice(yesNode.start, yesNode.end);
-    // 删掉原是目标定义
-    result = result.slice(0, yesNode.start) + result.slice(yesNode.end);
-    // 重新解析定位否目标（位置已变）
-    const parsed2 = parseDiagram(result);
-    const noNode2 = parsed2.nodes.find((n) => n.id === noTarget);
-    if (noNode2) {
-      // 在否目标定义前插入是目标定义
-      result = result.slice(0, noNode2.start) + yesDefText + '\n' + result.slice(noNode2.start);
+  if (yesTarget && noTarget) {
+    const parsed = parseDiagram(result);
+    const yesNode = parsed.nodes.find((n) => n.id === yesTarget);
+    const noNode = parsed.nodes.find((n) => n.id === noTarget);
+    if (yesNode && noNode && yesNode.start > noNode.start) {
+      // 是目标定义在否目标后面：删掉原是目标定义，再插到否目标定义前
+      const yesDefText = result.slice(yesNode.start, yesNode.end);
+      result = result.slice(0, yesNode.start) + result.slice(yesNode.end);
+      // 重新解析定位否目标（位置已变）
+      const parsed2 = parseDiagram(result);
+      const noNode2 = parsed2.nodes.find((n) => n.id === noTarget);
+      if (noNode2) {
+        // 在否目标定义前插入是目标定义
+        result = result.slice(0, noNode2.start) + yesDefText + '\n' + result.slice(noNode2.start);
+      }
     }
-  } else if (yesNode && !noNode) {
-    // 否目标无定义，在是目标定义后补否目标
-    result = result.replace(/\s+$/, '') + `\n${noTarget}["${noTarget}"]\n`;
   }
 
-  // 先加【是】边再加【否】边（mermaid 按边顺序排左右：先出现的在左）
-  result = addLabeledEdge(result, nodeId, yesTarget, '是');
-  result = addLabeledEdge(result, nodeId, noTarget, '否');
-  // 隐形链接：强制是/否目标同一层级
-  if (yesTarget !== noTarget) {
+  // 先加【是】边再加【否】边（mermaid 按边顺序排左右：先出现的在左；null 分支跳过）
+  if (yesTarget) result = addLabeledEdge(result, nodeId, yesTarget, '是');
+  if (noTarget) result = addLabeledEdge(result, nodeId, noTarget, '否');
+  // 隐形链接：强制是/否目标同一层级（仅两个分支都设置时）
+  if (yesTarget && noTarget && yesTarget !== noTarget) {
     result = result.replace(/\s+$/, '') + `\n${yesTarget} ~~~ ${noTarget}\n`;
   }
   return result;
