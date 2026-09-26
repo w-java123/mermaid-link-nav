@@ -482,22 +482,22 @@ export function deleteNode(source: string, nodeId: string): string {
     let modified = line;
     // 1. 链式边：X -->|标签? B(定义) --> Y → X --> Y
     modified = modified.replace(
-      new RegExp(`-->\\s*(?:\\|[^|]*\\|\\s*)?${idEsc}[^\\n]*?-->`, 'g'),
+      new RegExp(`-->\\s*(?:\\|[^|]*\\|\\s*)?\\b${idEsc}\\b[^\\n]*?-->`, 'g'),
       '-->',
     );
     // 2. 入边（B 为目标且无出边同行）：... -->|标签? B(定义) → 删到行尾
     modified = modified.replace(
-      new RegExp(`\\s*-->\\s*(?:\\|[^|]*\\|\\s*)?${idEsc}.*$`),
+      new RegExp(`\\s*-->\\s*(?:\\|[^|]*\\|\\s*)?\\b${idEsc}\\b.*$`),
       '',
     );
     // 3. 出边（B 为源且无入边同行）：B(定义) --> Y → 删到 --> 后（含可选边标签 |是|/|否|，避免判断节点删除后残留标签）
     modified = modified.replace(
-      new RegExp(`^\\s*${idEsc}.*?-->\\s*(?:\\|[^|]*\\|\\s*)?`),
+      new RegExp(`^\\s*\\b${idEsc}\\b.*?-->\\s*(?:\\|[^|]*\\|\\s*)?`),
       '',
     );
     // 4. 孤立节点定义
     modified = modified.replace(
-      new RegExp(`${idEsc}.*$`),
+      new RegExp(`\\b${idEsc}\\b.*$`),
       '',
     );
 
