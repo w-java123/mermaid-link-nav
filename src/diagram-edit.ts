@@ -490,9 +490,9 @@ export function deleteNode(source: string, nodeId: string): string {
       new RegExp(`\\s*-->\\s*(?:\\|[^|]*\\|\\s*)?${idEsc}.*$`),
       '',
     );
-    // 3. 出边（B 为源且无入边同行）：B(定义) --> Y → 删到 --> 后
+    // 3. 出边（B 为源且无入边同行）：B(定义) --> Y → 删到 --> 后（含可选边标签 |是|/|否|，避免判断节点删除后残留标签）
     modified = modified.replace(
-      new RegExp(`^\\s*${idEsc}.*?-->\\s*`),
+      new RegExp(`^\\s*${idEsc}.*?-->\\s*(?:\\|[^|]*\\|\\s*)?`),
       '',
     );
     // 4. 孤立节点定义
