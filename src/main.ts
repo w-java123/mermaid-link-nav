@@ -425,6 +425,18 @@ export default class MermaidLinkNavPlugin extends Plugin {
                   });
               }),
           );
+          if (this.settings.fileNewNoteMap[file.path]) {
+            menu.addItem((item) =>
+              item
+                .setTitle('取消该笔记的新笔记创建位置')
+                .setIcon('trash')
+                .onClick(() => {
+                  delete this.settings.fileNewNoteMap[file.path];
+                  void this.saveSettings();
+                  new Notice(`已取消：${file.path} 的新笔记创建位置（恢复继承规则）`);
+                }),
+            );
+          }
         }
       }),
     );
@@ -1645,7 +1657,20 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
           });
       });
 
-    // 新笔记创建位置改为右键配置：右键文件夹可设置该文件夹，右键笔记文件可单独设置（此板块已移除）
+    new Setting(containerEl).setName('笔记创建').setHeading();
+
+    new Setting(containerEl)
+      .setName('新笔记默认文件夹（全局）')
+      .setDesc('点击流程图中不存在的链接时，自动在此文件夹下创建笔记。留空则使用 Obsidian 默认位置；若链接本身已含路径（如 folder/note）则尊重链接路径。优先级：当前笔记单独配置 > 所在文件夹逐级向上 > 此全局设置。')
+      .addText((text) =>
+        text
+          .setPlaceholder('例如：Inbox 或 学习笔记/草稿')
+          .setValue(this.plugin.settings.newNoteFolder)
+          .onChange(async (v) => {
+            this.plugin.settings.newNoteFolder = v.trim().replace(/^\/+|\/+$/g, '');
+            await this.plugin.saveSettings();
+          }),
+      );
 
     new Setting(containerEl).setName('外观').setHeading();
 
