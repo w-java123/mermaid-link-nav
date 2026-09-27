@@ -42,8 +42,10 @@ interface MermaidLinkNavSettings {
   hoverHighlight: boolean;
   /** 点击不存在的链接时，自动创建笔记的目标文件夹（留空=Obsidian 默认位置） */
   newNoteFolder: string;
-  /** 按根目录文件夹分别指定新笔记创建位置（文件夹名 → 目标文件夹，留空=用全局 newNoteFolder） */
+  /** 按文件夹分别指定新笔记创建位置（文件夹路径 → 目标文件夹；子文件夹逐级向上继承） */
   folderNewNoteMap: Record<string, string>;
+  /** 按笔记文件单独指定新笔记创建位置（笔记文件路径 → 目标文件夹，优先于文件夹/全局） */
+  fileNewNoteMap: Record<string, string>;
   /** PNG 导出文件夹（留空=库根目录「PNG图片」全局文件夹，自动按笔记名建子文件夹） */
   exportFolderPng: string;
   /** SVG 导出文件夹（留空=库根目录「SVG图片」全局文件夹，自动按笔记名建子文件夹） */
@@ -59,9 +61,31 @@ const DEFAULT_SETTINGS: MermaidLinkNavSettings = {
   hoverHighlight: true,
   newNoteFolder: '',
   folderNewNoteMap: {},
+  fileNewNoteMap: {},
   exportFolderPng: '',
   exportFolderSvg: '',
 };
+
+/** 解析新笔记创建目标文件夹：文件级配置 > 所在文件夹逐级向上 > 全局设置 > ''（Obsidian 默认位置） */
+export function resolveNewNoteFolder(
+  sourcePath: string,
+  fileMap: Record<string, string>,
+  folderMap: Record<string, string>,
+  globalFolder: string,
+): string {
+  if (fileMap[sourcePath]) return fileMap[sourcePath];
+  if (sourcePath.includes('/')) {
+    let dir = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
+    while (dir) {
+      const v = folderMap[dir];
+      if (v) return v;
+      const idx = dir.lastIndexOf('/');
+      if (idx < 0) break;
+      dir = dir.substring(0, idx);
+    }
+  }
+  return globalFolder || '';
+}
 
 /** 文件夹选择器：Obsidian 当前版本未导出 FolderSuggest，这里基于 AbstractInputSuggest 实现 */
 class FolderSuggest extends AbstractInputSuggest<string> {
@@ -354,31 +378,54 @@ export default class MermaidLinkNavPlugin extends Plugin {
     this.registerEvent(this.app.vault.on('create', (file) => {
       if (file.path === VIEWBOX_FILE) void loadViewBoxFile(this.app);
     }));
-    // 右键文件夹 → 设置该文件夹的新笔记创建位置
+    // 右键设置新笔记创建位置：文件夹 → 批量（该文件夹内笔记生效），笔记文件 → 单独配置
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
-        if (!(file instanceof TFolder)) return;
-        menu.addItem((item) =>
-          item
-            .setTitle('设置该文件夹的新笔记创建位置')
-            .setIcon('folder-input')
-            .onClick(() => {
-              const current = this.settings.folderNewNoteMap[file.path] || '';
-              void new FolderInputModal(
-                this.app,
-                `设置「${file.path === '/' ? '库根目录' : file.path}」的新笔记创建位置`,
-                current,
-              )
-                .openAndGet()
-                .then((targetPath) => {
-                  this.settings.folderNewNoteMap[file.path] = targetPath;
-                  void this.saveSettings();
-                  new Notice(
-                    `已设置：${file.path === '/' ? '库根目录' : file.path} 的新笔记创建位置 → ${targetPath === '' ? 'Obsidian 默认位置' : targetPath}`,
-                  );
-                });
-            }),
-        );
+        if (file instanceof TFolder) {
+          menu.addItem((item) =>
+            item
+              .setTitle('设置该文件夹的新笔记创建位置')
+              .setIcon('folder-input')
+              .onClick(() => {
+                const current = this.settings.folderNewNoteMap[file.path] || '';
+                void new FolderInputModal(
+                  this.app,
+                  `设置「${file.path === '/' ? '库根目录' : file.path}」的新笔记创建位置`,
+                  current,
+                )
+                  .openAndGet()
+                  .then((targetPath) => {
+                    this.settings.folderNewNoteMap[file.path] = targetPath;
+                    void this.saveSettings();
+                    new Notice(
+                      `已设置：${file.path === '/' ? '库根目录' : file.path} 的新笔记创建位置 → ${targetPath === '' ? 'Obsidian 默认位置' : targetPath}`,
+                    );
+                  });
+              }),
+          );
+        } else if (file instanceof TFile && file.extension === 'md') {
+          menu.addItem((item) =>
+            item
+              .setTitle('设置该笔记的新笔记创建位置')
+              .setIcon('file-input')
+              .onClick(() => {
+                const current = this.settings.fileNewNoteMap[file.path] || '';
+                void new FolderInputModal(
+                  this.app,
+                  `设置「${file.path}」的新笔记创建位置`,
+                  current,
+                )
+                  .openAndGet()
+                  .then((targetPath) => {
+                    this.settings.fileNewNoteMap[file.path] = targetPath;
+                    void this.saveSettings();
+                    new Notice(
+                      `已设置：${file.path} 的新笔记创建位置 → ${targetPath === '' ? 'Obsidian 默认位置' : targetPath}`,
+                    );
+                  });
+              }),
+          );
+        }
       }),
     );
 
@@ -1214,21 +1261,13 @@ export default class MermaidLinkNavPlugin extends Plugin {
           // 链接不存在且设置了目标文件夹、且链接本身未指定路径时，自动在该文件夹创建
           const targetPath = link.target.split('#')[0];
           const existed = !!this.app.metadataCache.getFirstLinkpathDest(targetPath, sourcePath);
-          // 目标文件夹：按当前笔记所在文件夹路径逐级向上匹配映射，其次全局设置
-          let folderSetting = this.settings.newNoteFolder;
-          if (sourcePath.includes('/')) {
-            let dir = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
-            while (dir) {
-              const v = this.settings.folderNewNoteMap[dir];
-              if (v) {
-                folderSetting = v;
-                break;
-              }
-              const idx = dir.lastIndexOf('/');
-              if (idx < 0) break;
-              dir = dir.substring(0, idx);
-            }
-          }
+          // 目标文件夹：1) 当前笔记文件单独配置（最高优先）→ 2) 所在文件夹逐级向上匹配 → 3) 全局设置兜底
+          let folderSetting = resolveNewNoteFolder(
+            sourcePath,
+            this.settings.fileNewNoteMap,
+            this.settings.folderNewNoteMap,
+            this.settings.newNoteFolder,
+          );
           if (!existed && folderSetting && !targetPath.includes('/')) {
             let folder = this.app.vault.getAbstractFileByPath(folderSetting);
             if (!(folder instanceof TFolder)) {
@@ -1606,43 +1645,7 @@ class MermaidLinkNavSettingTab extends PluginSettingTab {
           });
       });
 
-    new Setting(containerEl).setName('笔记创建').setHeading();
-
-    new Setting(containerEl)
-      .setName('新笔记默认文件夹（全局）')
-      .setDesc('点击流程图中不存在的链接时，自动在此文件夹下创建笔记。留空则使用 Obsidian 默认位置；若链接本身已含路径（如 folder/note）则尊重链接路径。下方可为每个根目录文件夹单独指定位置。')
-      .addText((text) =>
-        text
-          .setPlaceholder('例如：Inbox 或 学习笔记/草稿')
-          .setValue(this.plugin.settings.newNoteFolder)
-          .onChange(async (v) => {
-            this.plugin.settings.newNoteFolder = v.trim().replace(/^\/+|\/+$/g, '');
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    // 按根目录文件夹分别配置新笔记创建位置
-    const rootFolders = this.app.vault
-      .getAllLoadedFiles()
-      .filter((f): f is TFolder => f instanceof TFolder && !f.path.includes('/'));
-    if (rootFolders.length > 0) {
-      new Setting(containerEl)
-        .setName('按文件夹设置新笔记位置')
-        .setDesc('为根目录下的每个文件夹分别指定「点击不存在链接时创建笔记」的目标位置。留空该文件夹则使用上方全局设置。');
-      rootFolders.forEach((folder) => {
-        new Setting(containerEl)
-          .setName(folder.name)
-          .addText((text) =>
-            text
-              .setPlaceholder('留空 = 使用全局设置')
-              .setValue(this.plugin.settings.folderNewNoteMap[folder.path] || '')
-              .onChange(async (v) => {
-                this.plugin.settings.folderNewNoteMap[folder.path] = v.trim().replace(/^\/+|\/+$/g, '');
-                await this.plugin.saveSettings();
-              }),
-          );
-      });
-    }
+    // 新笔记创建位置改为右键配置：右键文件夹可设置该文件夹，右键笔记文件可单独设置（此板块已移除）
 
     new Setting(containerEl).setName('外观').setHeading();
 
