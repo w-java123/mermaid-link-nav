@@ -620,11 +620,11 @@ export default class MermaidLinkNavPlugin extends Plugin {
       // 单行压缩格式规范化后再渲染，避免 mermaid 11 解析/渲染崩溃（孤立节点定义夹在语句间）
       const renderCode = normalizeDiagram(parsed.code);
       const result = await mermaid.render(renderId, renderCode);
-      // 用 HTML 解析器（insertAdjacentHTML）插入 svg，而不是 DOMParser('image/svg+xml')：
+      // 用 innerHTML 赋值插入 svg，而不是 DOMParser('image/svg+xml')：
       // mermaid 输出的 foreignObject 内是未闭合的 <br>（HTML 风格），XML 解析器会报
       // 'Opening and ending tag mismatch: br' 并截断 svg（只剩前几个节点，图显示空白/缺失）。
-      // Obsidian 原生 mermaid 渲染也是用 insertAdjacentHTML，HTML 解析器能完整解析 foreignObject。
-      wrapper.insertAdjacentHTML('beforeend', result.svg);
+      // innerHTML 走 HTML 解析器，能完整解析 foreignObject（与 Obsidian 原生 mermaid 行为一致）。
+      wrapper.innerHTML = result.svg;
       result.bindFunctions?.(wrapper);
       delete wrapper.dataset.mlnState;
       wrapper.dataset.renderId = renderId;
